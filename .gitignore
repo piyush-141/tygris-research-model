@@ -1,0 +1,62 @@
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+
+# Large Datasets (Images should not be committed to GitHub)
+atrw_reid_train/
+atrw_reid_test/
+atrw_detection_train/
+atrw_detection_test/
+atrw_pose_train/
+atrw_pose_test/
+atrw_pose_val/
+*.jpg
+*.jpeg
+*.png
+*.mp4
+*.avi
+
+# PyTorch Weights & Pretrained Models (>100MB exceeds GitHub limits)
+outputs/checkpoints/*.pth
+*.pt
+*.pth
+*.onnx
+
+# Keep trained gallery metadata and configs
+!outputs/trained_gallery.json
+!outputs/training_summary.json
+
+# SQLite Database & Logs
+outputs/pench_sightings.db
+outputs/logs/
+*.log
+
+# IDE & OS Specific
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

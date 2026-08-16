@@ -1,0 +1,30 @@
+{
+  "device": "cuda",
+  "gpu_name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+  "segmentation_metrics": {
+    "BIoU": 0.8623011649918535,
+    "TIoU": 0.7977172108467072,
+    "MIoU": 0.8300091879192804
+  },
+  "representation_metrics": {
+    "Top-1": 0.17940199335548174,
+    "Top-3": 0.3770764119601329,
+    "Micro-F1": 0.17940199335548174,
+    "mAP": 0.3257710261387128
+  },
+  "metric_learning_metrics": {
+    "Precision@1": 0.38372093023255816,
+    "R-Precision": 0.2552761288948649,
+    "MAP@R": 0.2856531826574201,
+    "MRR": 0.5133249609881184,
+    "AMI": 0.39409427322188345
+  },
+  "final_fusion_test_accuracy": 0.0,
+  "avg_latency_ms": 0.0,
+  "checkpoints": {
+    "ddrnet39": "outputs/checkpoints/ddrnet39_best.pth",
+    "convnext_representation": "outputs/checkpoints/convnext_representation_best.pth",
+    "convnext_metric": "outputs/checkpoints/convnext_metric_best.pth",
+    "gallery": "outputs/trained_gallery.json"
+  }
+}

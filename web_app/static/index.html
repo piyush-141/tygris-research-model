@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tiger Re-Identification — Visual AI Pipeline</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg-main: #080c15;
+      --bg-card: #0f172a;
+      --bg-card-hover: #141f36;
+      --bg-card-border: rgba(255, 255, 255, 0.08);
+      --bg-surface: #172238;
+      --bg-input: #0b1120;
+
+      --accent-amber: #f59e0b;
+      --accent-amber-glow: rgba(245, 158, 11, 0.25);
+      --accent-cyan: #38bdf8;
+      --accent-cyan-glow: rgba(56, 189, 248, 0.25);
+      --accent-emerald: #10b981;
+      --accent-emerald-glow: rgba(16, 185, 129, 0.25);
+      --accent-rose: #f43f5e;
+      --accent-indigo: #6366f1;
+
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+
+      --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+      --font-display: 'Outfit', var(--font-sans);
+      --font-mono: 'JetBrains Mono', monospace;
+
+      --shadow-card: 0 10px 30px -10px rgba(0, 0, 0, 0.6);
+      --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background-color: var(--bg-main);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.07) 0px, transparent 50%),
+        radial-gradient(at 100% 0%, rgba(245, 158, 11, 0.07) 0px, transparent 50%),
+        radial-gradient(at 50% 100%, rgba(16, 185, 129, 0.05) 0px, transparent 50%);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      min-height: 100vh;
+      padding: 1.25rem 2rem;
+      overflow-x: hidden;
+    }
+
+    .app-wrapper {
+      max-width: 1600px;
+      margin: 0 auto;
+    }
+
+    /* Top Navigation Header */
+    .top-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.25rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--bg-card-border);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .brand-icon {
+      font-size: 2.2rem;
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      padding: 0.35rem 0.65rem;
+      border-radius: var(--radius-md);
+      box-shadow: 0 0 20px var(--accent-amber-glow);
+    }
+
+    .brand-title {
+      font-family: var(--font-display);
+      font-size: 1.65rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #ffffff 40%, var(--accent-amber) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .brand-subtitle {
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+    }
+
+    .header-pills {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .pill {
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 0.35rem 0.75rem;
+      border-radius: 9999px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+
+    .pill-green {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--accent-emerald);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .pill-cyan {
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--accent-cyan);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+
+    .pill-amber {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--accent-amber);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    /* Main App Layout: 2 Columns */
+    .main-layout {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 1.25rem;
+      align-items: start;
+    }
+
+    @media (max-width: 1100px) {
+      .main-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Left Control Sidebar */
+    .control-sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .panel-card {
+      background: var(--bg-card);
+      border: 1px solid var(--bg-card-border);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem;
+      box-shadow: var(--shadow-card);
+    }
+
+    .panel-title {
+      font-family: var(--font-display);
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: 0.85rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* Upload & Dropzone Area */
+    .dropzone-area {
+      border: 2px dashed rgba(255, 255, 255, 0.15);
+      background: rgba(0, 0, 0, 0.25);
+      border-radius: var(--radius-md);
+      padding: 1.25rem 1rem;
+      text-align: center;
+      cursor: pointer;
+      transition: var(--transition);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    .dropzone-area:hover {
+      border-color: var(--accent-cyan);
+      background: rgba(56, 189, 248, 0.05);
+      box-shadow: 0 0 20px var(--accent-cyan-glow);
+    }
+
+    .dropzone-area input[type="file"] {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      opacity: 0;
+      cursor: pointer;
+    }
+
+    .dropzone-icon {
+      font-size: 1.8rem;
+      margin-bottom: 0.3rem;
+    }
+
+    .dropzone-text {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--accent-cyan);
+    }
+
+    .dropzone-hint {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      margin-top: 0.2rem;
+    }
+
+    /* Preloaded Sample Library (Clean Contained Grid) */
+    .sample-grid-container {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.5rem;
+      max-height: 230px;
+      overflow-y: auto;
+      padding-right: 0.25rem;
+    }
+
+    .sample-grid-item {
+      aspect-ratio: 1;
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      border: 2px solid transparent;
+      cursor: pointer;
+      background: #000;
+      transition: var(--transition);
+      position: relative;
+    }
+
+    .sample-grid-item img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .sample-grid-item:hover {
+      transform: scale(1.05);
+      border-color: var(--accent-amber);
+      z-index: 2;
+    }
+
+    .sample-grid-item.active {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 14px var(--accent-cyan-glow);
+      z-index: 3;
+    }
+
+    /* Run Pipeline Button */
+    .btn-execute {
+      width: 100%;
+      background: linear-gradient(135deg, var(--accent-amber), #d97706);
+      color: #000;
+      font-family: var(--font-sans);
+      font-weight: 800;
+      font-size: 0.95rem;
+      padding: 0.85rem 1.5rem;
+      border-radius: var(--radius-md);
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      transition: var(--transition);
+      box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4);
+    }
+
+    .btn-execute:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(245, 158, 11, 0.55);
+    }
+
+    .btn-execute:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* Right Main Display Area */
+    .pipeline-main-area {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    /* Top Final Decision Banner */
+    .decision-banner {
+      background: var(--bg-card);
+      border: 1px solid var(--bg-card-border);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem 1.6rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: var(--transition);
+      box-shadow: var(--shadow-card);
+    }
+
+    .decision-banner.status-neutral {
+      border-left: 5px solid var(--text-muted);
+    }
+
+    .decision-banner.status-known {
+      border-left: 5px solid var(--accent-emerald);
+      background: linear-gradient(90deg, rgba(16, 185, 129, 0.12), var(--bg-card));
+      box-shadow: 0 0 30px var(--accent-emerald-glow);
+    }
+
+    .decision-banner.status-unknown {
+      border-left: 5px solid var(--accent-rose);
+      background: linear-gradient(90deg, rgba(244, 63, 94, 0.12), var(--bg-card));
+      box-shadow: 0 0 30px rgba(244, 63, 94, 0.2);
+    }
+
+    .decision-tag {
+      font-size: 0.72rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent-cyan);
+    }
+
+    .decision-headline {
+      font-family: var(--font-display);
+      font-size: 1.65rem;
+      font-weight: 800;
+      margin: 0.2rem 0;
+      color: #fff;
+    }
+
+    .decision-detail {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    /* 4-Stage Visual Cards Grid */
+    .stages-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+    }
+
+    @media (max-width: 1300px) {
+      .stages-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 700px) {
+      .stages-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .stage-card {
+      background: var(--bg-card);
+      border: 1px solid var(--bg-card-border);
+      border-radius: var(--radius-lg);
+      padding: 1.1rem;
+      display: flex;
+      flex-direction: column;
+      box-shadow: var(--shadow-card);
+      transition: var(--transition);
+      min-width: 0;
+    }
+
+    .stage-card:hover {
+      border-color: rgba(255, 255, 255, 0.2);
+      transform: translateY(-2px);
+    }
+
+    .stage-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+
+    .stage-step-num {
+      font-size: 0.68rem;
+      font-weight: 800;
+      color: var(--accent-cyan);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .stage-title {
+      font-family: var(--font-display);
+      font-size: 1rem;
+      font-weight: 700;
+      margin-top: 0.1rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .stage-canvas-box {
+      width: 100%;
+      height: 200px;
+      background: #000;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--bg-card-border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      margin-bottom: 0.85rem;
+      position: relative;
+    }
+
+    .stage-canvas-box img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: none;
+    }
+
+    .stage-placeholder {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      text-align: center;
+      padding: 1rem;
+    }
+
+    .stage-text {
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+      line-height: 1.45;
+      margin-bottom: 0.75rem;
+      flex: 1;
+    }
+
+    .stage-text strong {
+      color: var(--text-primary);
+    }
+
+    .stage-meta-row {
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      border-radius: var(--radius-sm);
+      padding: 0.4rem 0.65rem;
+      font-size: 0.74rem;
+      color: var(--text-secondary);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .stage-meta-row strong {
+      color: var(--accent-cyan);
+    }
+
+    /* Stage 4 Custom Analysis Box */
+    .analysis-container {
+      height: 200px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+      margin-bottom: 0.85rem;
+    }
+
+    .branch-card {
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid var(--bg-card-border);
+      border-radius: var(--radius-sm);
+      padding: 0.55rem;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .branch-label {
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--accent-cyan);
+    }
+
+    .branch-val {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin: 0.15rem 0;
+    }
+
+    .meter-container {
+      width: 100%;
+      height: 5px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 9999px;
+      overflow: hidden;
+    }
+
+    .meter-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent-cyan), var(--accent-emerald));
+      transition: width 0.4s ease;
+    }
+
+    .sparkline-box {
+      display: flex;
+      gap: 2px;
+      height: 18px;
+      align-items: flex-end;
+      margin: 0.2rem 0;
+    }
+
+    .sparkline-bar {
+      flex: 1;
+      background: var(--accent-indigo);
+      border-radius: 1px;
+    }
+
+    /* Database Matches Box */
+    .knn-matches-card {
+      background: var(--bg-card);
+      border: 1px solid var(--bg-card-border);
+      border-radius: var(--radius-lg);
+      padding: 1.1rem 1.4rem;
+      box-shadow: var(--shadow-card);
+    }
+
+    .knn-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.85rem;
+      margin-top: 0.6rem;
+    }
+
+    @media (max-width: 800px) {
+      .knn-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .knn-item {
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid var(--bg-card-border);
+      border-radius: var(--radius-sm);
+      padding: 0.65rem 0.9rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .knn-rank {
+      font-weight: 800;
+      color: var(--accent-cyan);
+      margin-right: 0.4rem;
+    }
+
+    .knn-id {
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .knn-dist {
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      color: var(--accent-amber);
+    }
+  </style>
+</head>
+<body>
+  <div class="app-wrapper">
+    
+    <!-- Top Header -->
+    <header class="top-header">
+      <div class="brand">
+        <div class="brand-icon">🐅</div>
+        <div>
+          <h1 class="brand-title">Tiger Re-Identification — Visual Pipeline</h1>
+          <p class="brand-subtitle">Ma et al. (2025) · Ecological Indicators · DDRNet-39 + ConvNeXt-small Dual Branch</p>
+        </div>
+      </div>
+      <div class="header-pills">
+        <span class="pill pill-green">⚡ RTX 4060 GPU</span>
+        <span class="pill pill-cyan">DDRNet-39</span>
+        <span class="pill pill-amber">64-D Metric Learning</span>
+      </div>
+    </header>
+
+    <!-- Main Layout: 2 Columns -->
+    <div class="main-layout">
+      
+      <!-- Left Controls Sidebar -->
+      <aside class="control-sidebar">
+        
+        <!-- Upload Box -->
+        <div class="panel-card">
+          <h2 class="panel-title">Upload Camera-Trap Photo</h2>
+          <label class="dropzone-area" id="dropzone">
+            <input type="file" id="file-input" accept="image/*">
+            <div class="dropzone-icon">📁</div>
+            <span class="dropzone-text">Click or Drag Photo Here</span>
+            <span class="dropzone-hint">Supports JPG, PNG</span>
+          </label>
+        </div>
+
+        <!-- Sample Carousel Grid -->
+        <div class="panel-card">
+          <h2 class="panel-title">
+            <span>Preloaded Samples</span>
+            <span style="font-size: 0.72rem; color: var(--text-muted);">18 Images</span>
+          </h2>
+          <div class="sample-grid-container" id="sample-grid">
+            <!-- Dynamically populated 4x4 grid -->
+          </div>
+        </div>
+
+        <!-- Action Button -->
+        <button id="run-btn" class="btn-execute">
+          <span>⚡ Run AI Pipeline</span>
+        </button>
+
+      </aside>
+
+      <!-- Right Main Pipeline Area -->
+      <main class="pipeline-main-area">
+        
+        <!-- Top Decision Banner -->
+        <section id="decision-banner" class="decision-banner status-neutral">
+          <div>
+            <span class="decision-tag" id="decision-tag">READY TO ANALYZE</span>
+            <h2 class="decision-headline" id="decision-headline">Select a photo on the left & click "Run AI Pipeline"</h2>
+            <p class="decision-detail" id="decision-detail">The 4 stages below demonstrate the exact image transformations and mathematical calculations.</p>
+          </div>
+        </section>
+
+        <!-- 4-Stage Visual Cards Grid -->
+        <div class="stages-grid">
+          
+          <!-- STAGE 1: RAW INPUT -->
+          <div class="stage-card">
+            <div class="stage-header">
+              <span class="stage-step-num">STAGE 1</span>
+              <h3 class="stage-title">Raw Camera Photo</h3>
+            </div>
+            <div class="stage-canvas-box">
+              <img id="img-stage-1" src="" alt="Stage 1">
+              <div id="placeholder-stage-1" class="stage-placeholder">Select or upload a photo</div>
+            </div>
+            <p class="stage-text">
+              <strong>What happens here?</strong> The camera trap in the jungle captures a raw photo containing heavy foliage, unpredictable lighting, and shadows.
+            </p>
+            <div class="stage-meta-row">
+              <span>Source:</span> <strong id="meta-source">Camera Trap</strong>
+            </div>
+          </div>
+
+          <!-- STAGE 2: DDRNet-39 SEGMENTATION -->
+          <div class="stage-card">
+            <div class="stage-header">
+              <span class="stage-step-num">STAGE 2</span>
+              <h3 class="stage-title">DDRNet-39 Mask</h3>
+            </div>
+            <div class="stage-canvas-box">
+              <img id="img-stage-2" src="" alt="Stage 2">
+              <div id="placeholder-stage-2" class="stage-placeholder">Awaiting pipeline run</div>
+            </div>
+            <p class="stage-text">
+              <strong>What happens here?</strong> <em>DDRNet-39</em> predicts pixel categories: <strong>Green = Tiger</strong>, <strong>Black = Background</strong>.
+            </p>
+            <div class="stage-meta-row">
+              <span>QA Status:</span> <strong id="meta-qa">Awaiting</strong>
+            </div>
+          </div>
+
+          <!-- STAGE 3: ISOLATED CROP -->
+          <div class="stage-card">
+            <div class="stage-header">
+              <span class="stage-step-num">STAGE 3</span>
+              <h3 class="stage-title">Isolated Cutout</h3>
+            </div>
+            <div class="stage-canvas-box">
+              <img id="img-stage-3" src="" alt="Stage 3">
+              <div id="placeholder-stage-3" class="stage-placeholder">Awaiting pipeline run</div>
+            </div>
+            <p class="stage-text">
+              <strong>What happens here?</strong> Jungle background is stripped away and the tiger is tightly cropped so trees do not confuse the Re-ID network.
+            </p>
+            <div class="stage-meta-row">
+              <span>Bounding Box:</span> <strong id="meta-bbox">Pending</strong>
+            </div>
+          </div>
+
+          <!-- STAGE 4: DUAL-BRANCH CONVNEXT -->
+          <div class="stage-card">
+            <div class="stage-header">
+              <span class="stage-step-num">STAGE 4</span>
+              <h3 class="stage-title">Dual-Branch AI</h3>
+            </div>
+            <div class="analysis-container">
+              <div class="branch-card">
+                <span class="branch-label">Branch A: Direct Classifier</span>
+                <div class="branch-val" id="branch-a-pred">Top Guess: --</div>
+                <div class="meter-container">
+                  <div id="branch-a-fill" class="meter-bar" style="width: 0%;"></div>
+                </div>
+              </div>
+              <div class="branch-card">
+                <span class="branch-label">Branch B: 64-D Stripe Fingerprint</span>
+                <div class="sparkline-box" id="sparkline-box"></div>
+                <div style="font-size: 0.68rem; color: var(--text-muted);" id="branch-b-dist">Nearest Database Match: --</div>
+              </div>
+            </div>
+            <p class="stage-text">
+              <strong>What happens here?</strong> <em>ConvNeXt-small</em> computes a 64-D stripe vector and compares it against enrolled tigers via Euclidean distance.
+            </p>
+            <div class="stage-meta-row">
+              <span>Embedding:</span> <strong>64-D Unit Norm</strong>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Bottom Database Matches -->
+        <section class="knn-matches-card">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h3 style="font-family: var(--font-display); font-size: 0.95rem; font-weight: 700;">
+              Top 3 Database Matches & Metric Distances (k=7 Nearest Neighbors)
+            </h3>
+            <span style="font-size: 0.72rem; color: var(--text-secondary);">Fusion Formula: Vote = Rep(1.0) + Σ 1/(0.1 + d)</span>
+          </div>
+          <div class="knn-grid" id="knn-grid">
+            <div class="knn-item" style="grid-column: span 3; justify-content: center; color: var(--text-muted); font-size: 0.8rem;">
+              Select a photo and click "Run AI Pipeline" to view nearest matches
+            </div>
+          </div>
+        </section>
+
+      </main>
+
+    </div>
+
+  </div>
+
+  <!-- Integrated JavaScript Client -->
+  <script>
+    let activeImage = {
+      path: null,
+      base64: null,
+      result: null
+    };
+
+    document.addEventListener("DOMContentLoaded", () => {
+      loadSampleGrid();
+      setupUploadHandlers();
+      setupRunButton();
+    });
+
+    /* Load Preloaded Sample Grid */
+    async function loadSampleGrid() {
+      const container = document.getElementById("sample-grid");
+      try {
+        const res = await fetch("/api/sample_images");
+        const data = await res.json();
+        container.innerHTML = "";
+
+        if (!data.samples || data.samples.length === 0) {
+          container.innerHTML = `<div style="grid-column: span 4; font-size: 0.75rem; color: var(--text-muted); text-align: center; padding: 1rem;">No samples found.</div>`;
+          return;
+        }
+
+        data.samples.forEach((s, idx) => {
+          const item = document.createElement("div");
+          item.className = `sample-grid-item ${idx === 0 ? "active" : ""}`;
+          item.title = `Click to select: ${s.filename}`;
+          item.innerHTML = `<img src="/api/image_raw?path=${encodeURIComponent(s.path)}" alt="${s.filename}">`;
+
+          item.addEventListener("click", () => {
+            document.querySelectorAll(".sample-grid-item").forEach(el => el.classList.remove("active"));
+            item.classList.add("active");
+            setImageSelection(s.path, null);
+          });
+
+          container.appendChild(item);
+        });
+
+        if (data.samples.length > 0) {
+          setImageSelection(data.samples[0].path, null);
+        }
+      } catch (err) {
+        console.error("Failed to load sample grid", err);
+        container.innerHTML = `<div style="grid-column: span 4; font-size: 0.75rem; color: var(--text-muted); text-align: center; padding: 1rem;">Failed to load samples</div>`;
+      }
+    }
+
+    /* File Upload Handlers */
+    function setupUploadHandlers() {
+      const input = document.getElementById("file-input");
+      const dropzone = document.getElementById("dropzone");
+
+      input.addEventListener("change", (e) => {
+        if (e.target.files && e.target.files[0]) {
+          processFile(e.target.files[0]);
+        }
+      });
+
+      dropzone.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        dropzone.style.borderColor = "var(--accent-cyan)";
+      });
+      dropzone.addEventListener("dragleave", () => {
+        dropzone.style.borderColor = "";
+      });
+      dropzone.addEventListener("drop", (e) => {
+        e.preventDefault();
+        dropzone.style.borderColor = "";
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+          processFile(e.dataTransfer.files[0]);
+        }
+      });
+    }
+
+    function processFile(file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        document.querySelectorAll(".sample-grid-item").forEach(el => el.classList.remove("active"));
+        setImageSelection(null, e.target.result);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function setImageSelection(path, b64) {
+      activeImage.path = path;
+      activeImage.base64 = b64;
+      activeImage.result = null;
+
+      // Update Stage 1 Preview
+      const img1 = document.getElementById("img-stage-1");
+      const p1 = document.getElementById("placeholder-stage-1");
+      img1.src = b64 || `/api/image_raw?path=${encodeURIComponent(path)}`;
+      img1.style.display = "block";
+      p1.style.display = "none";
+      document.getElementById("meta-source").textContent = path ? "Dataset Image" : "Uploaded Photo";
+
+      resetStageOutputs();
+    }
+
+    function resetStageOutputs() {
+      ["img-stage-2", "img-stage-3"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = "none";
+      });
+      ["placeholder-stage-2", "placeholder-stage-3"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = "block";
+      });
+
+      document.getElementById("meta-qa").textContent = "Awaiting";
+      document.getElementById("meta-bbox").textContent = "Pending";
+
+      document.getElementById("branch-a-pred").textContent = "Top Guess: --";
+      document.getElementById("branch-a-fill").style.width = "0%";
+      document.getElementById("sparkline-box").innerHTML = "";
+      document.getElementById("branch-b-dist").textContent = "Nearest Database Match: --";
+
+      const banner = document.getElementById("decision-banner");
+      banner.className = "decision-banner status-neutral";
+      document.getElementById("decision-tag").textContent = "READY TO ANALYZE";
+      document.getElementById("decision-headline").textContent = "Select a photo on the left & click 'Run AI Pipeline'";
+      document.getElementById("decision-detail").textContent = "The 4 stages below demonstrate the exact image transformations and mathematical calculations.";
+
+      document.getElementById("knn-grid").innerHTML = `
+        <div class="knn-item" style="grid-column: span 3; justify-content: center; color: var(--text-muted); font-size: 0.8rem;">
+          Select a photo and click "Run AI Pipeline" to view nearest matches
+        </div>
+      `;
+    }
+
+    /* Run AI Pipeline Button */
+    function setupRunButton() {
+      const btn = document.getElementById("run-btn");
+      btn.addEventListener("click", async () => {
+        if (!activeImage.path && !activeImage.base64) {
+          alert("Please select or upload a tiger photo first!");
+          return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = `<span>⏳ Processing Stage 1 → 4...</span>`;
+
+        try {
+          const payload = {
+            image_path: activeImage.path,
+            image_base64: activeImage.base64,
+            camera_id: "PTR-CORE-EP-01",
+            timestamp: new Date().toISOString().slice(0, 19)
+          };
+
+          const res = await fetch("/api/inference", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+          const data = await res.json();
+          activeImage.result = data;
+
+          renderPipelineOutputs(data);
+        } catch (err) {
+          alert("Inference execution failed: " + err.message);
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = `<span>⚡ Run AI Pipeline</span>`;
+        }
+      });
+    }
+
+    /* Render Pipeline Outputs */
+    function renderPipelineOutputs(data) {
+      // Stage 2: Segmentation Mask
+      const img2 = document.getElementById("img-stage-2");
+      const p2 = document.getElementById("placeholder-stage-2");
+      img2.src = data.mask_b64;
+      img2.style.display = "block";
+      p2.style.display = "none";
+      document.getElementById("meta-qa").textContent = data.qa_status;
+      document.getElementById("meta-qa").style.color = (data.qa_status === "PASSED") ? "var(--accent-emerald)" : "var(--accent-amber)";
+
+      // Stage 3: Isolated Cutout
+      const img3 = document.getElementById("img-stage-3");
+      const p3 = document.getElementById("placeholder-stage-3");
+      img3.src = data.segmented_crop_b64;
+      img3.style.display = "block";
+      p3.style.display = "none";
+      if (data.bbox) {
+        document.getElementById("meta-bbox").textContent = `[${data.bbox.join(", ")}]`;
+      }
+
+      // Stage 4: Dual Branch
+      document.getElementById("branch-a-pred").textContent = `Top Guess: ${data.classifier_prediction}`;
+      const confPct = (data.classifier_confidence * 100).toFixed(1);
+      document.getElementById("branch-a-fill").style.width = `${Math.min(100, confPct)}%`;
+
+      const sparkline = document.getElementById("sparkline-box");
+      sparkline.innerHTML = "";
+      if (data.embedding_preview) {
+        data.embedding_preview.forEach(val => {
+          const h = Math.max(2, Math.min(18, Math.abs(val) * 45));
+          const bar = document.createElement("div");
+          bar.className = "sparkline-bar";
+          bar.style.height = `${h}px`;
+          bar.title = `Dim value: ${val.toFixed(4)}`;
+          sparkline.appendChild(bar);
+        });
+      }
+
+      const topNeighbor = (data.nearest_neighbors && data.nearest_neighbors.length > 0) ? data.nearest_neighbors[0] : null;
+      if (topNeighbor) {
+        document.getElementById("branch-b-dist").textContent = `Nearest: Tiger ${topNeighbor.tiger_id} (${topNeighbor.side}) · d = ${topNeighbor.distance.toFixed(4)}`;
+      }
+
+      // Decision Banner
+      const banner = document.getElementById("decision-banner");
+      const tag = document.getElementById("decision-tag");
+      const headline = document.getElementById("decision-headline");
+      const detail = document.getElementById("decision-detail");
+
+      if (data.recognized && data.status === "KNOWN") {
+        banner.className = "decision-banner status-known";
+        tag.textContent = "KNOWN TIGER CONFIRMED";
+        headline.textContent = `Identified as Tiger #${data.tiger_id}`;
+        detail.textContent = `Weighted Late Fusion Confidence: ${(data.confidence * 100).toFixed(1)}% · Distance to database match: ${data.nearest_distance} (Threshold ≤ 0.40).`;
+      } else {
+        banner.className = "decision-banner status-unknown";
+        tag.textContent = "UNKNOWN TIGER DETECTED";
+        headline.textContent = "New Individual Detected in Camera Trap";
+        detail.textContent = `Both branches rejected match (Classification probability ${confPct}% < 95% or Nearest distance ${data.nearest_distance} > 0.40).`;
+      }
+
+      // Database Matches Grid
+      const knnGrid = document.getElementById("knn-grid");
+      knnGrid.innerHTML = "";
+      if (data.nearest_neighbors && data.nearest_neighbors.length > 0) {
+        data.nearest_neighbors.slice(0, 3).forEach((m, idx) => {
+          const item = document.createElement("div");
+          item.className = "knn-item";
+          item.innerHTML = `
+            <div>
+              <span class="knn-rank">#${idx+1}</span>
+              <span class="knn-id">Tiger ${m.tiger_id} (${m.side})</span>
+            </div>
+            <span class="knn-dist">d = ${m.distance.toFixed(4)}</span>
+          `;
+          knnGrid.appendChild(item);
+        });
+      }
+    }
+  </script>
+</body>
+</html>

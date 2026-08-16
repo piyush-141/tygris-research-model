@@ -1,0 +1,22 @@
+# Deployment Extension Configuration (Pench Tiger Reserve, India)
+# [DEPLOYMENT EXTENSION] - Adapts the paper's Amur tiger methodology to Indian camera-trap deployment.
+
+deployment:
+  site_name: "Pench Tiger Reserve, Central India"
+  camera_stations_csv: "../dataset training/Pench_Synthetic_Metadata/pench_camera_stations.csv"
+  tiger_metadata_train_csv: "../dataset training/Pench_Synthetic_Metadata/pench_tiger_metadata_train.csv"
+  tiger_metadata_test_csv: "../dataset training/Pench_Synthetic_Metadata/pench_tiger_metadata_test.csv"
+  territories_json: "../dataset training/Pench_Synthetic_Metadata/pench_tiger_territories.json"
+  villages_json: "../dataset training/Pench_Synthetic_Metadata/pench_villages.json"
+  
+  evaluation_splits:
+    - "video_held_out"      # [PAPER-SPECIFIED standard split]
+    - "camera_held_out"     # [DEPLOYMENT EXTENSION]
+    - "time_held_out"       # [DEPLOYMENT EXTENSION]
+  
+  open_world:
+    enable_unknown_detection: true
+    rejection_confidence_threshold: 0.90 # Tuned on deployment validation
+    rejection_distance_threshold: 0.35    # Tuned on deployment validation
+    manual_verification_queue: "outputs/verification_queue.json"
+    sighting_database: "outputs/pench_sightings.db"

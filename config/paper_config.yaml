@@ -1,0 +1,116 @@
+# Paper-Faithful Configuration for Tiger Re-Identification
+# Reference: Ma et al., "Deep learning for Amur tiger re-identification in camera traps: 
+# A tool assisting population monitoring and spatio-temporal analysis," 
+# Ecological Indicators, 2025, DOI: 10.1016/j.ecolind.2025.113227.
+
+system:
+  random_seed: 42
+  device: "auto" # 'cuda' or 'cpu'
+  save_dir: "outputs/experiments"
+  reproducibility_log: "outputs/reproducibility.json"
+
+segmentation:
+  # [PAPER-SPECIFIED]
+  model: "DDRNet-39"
+  comparative_models:
+    - "STDC1-Seg75"
+    - "STDC2-Seg75"
+    - "RegSeg-48"
+    - "DDRNet-23"
+    - "DDRNet-39"
+    - "PP-LiteSeg-B75"
+    - "PP-LiteSeg-T75"
+  classes:
+    - "background"
+    - "tiger"
+  num_classes: 2
+  pretrained: "cityscapes" # [PAPER-SPECIFIED]
+  input_size: [1024, 1024] # [NOT SPECIFIED IN PAPER - CONFIGURABLE]
+  split:
+    train: 0.8 # [PAPER-SPECIFIED]
+    val: 0.2   # [PAPER-SPECIFIED]
+  training:
+    # [NOT SPECIFIED IN PAPER - CONFIGURABLE]
+    batch_size: 8
+    learning_rate: 0.005
+    epochs: 40
+    optimizer: "SGD"
+    momentum: 0.9
+    weight_decay: 0.0005
+    loss: "OhemCrossEntropy"
+  evaluation_metrics:
+    - "TIoU"
+    - "BIoU"
+    - "MIoU"
+
+reid:
+  # [PAPER-SPECIFIED]
+  representation_model: "ConvNeXt-small"
+  metric_model: "ConvNeXt-small"
+  embedding_dim: 64 # [PAPER-SPECIFIED]
+  distance_metric: "euclidean" # [PAPER-SPECIFIED]
+  knn_k: 7 # [PAPER-SPECIFIED]
+  freeze_backbone: false # [PAPER-SPECIFIED: complete network trainable]
+  pretrained: "imagenet" # [PAPER-SPECIFIED]
+  comparative_representation_models:
+    - "ResNet50"
+    - "ResNeXt50"
+    - "RepVGG-B1"
+    - "EfficientNet-B0"
+    - "ConvNeXt-small"
+    - "VAN"
+    - "Conformer-base-p16"
+    - "SwinTransformer-small"
+    - "Twins-SVT-base"
+    - "TinyViT-21m"
+  comparative_metric_models:
+    - "ResNet50"
+    - "ConvNeXt-small"
+  split:
+    train: 0.6 # [PAPER-SPECIFIED]
+    val: 0.2   # [PAPER-SPECIFIED]
+    test: 0.2  # [PAPER-SPECIFIED]
+    split_unit: "video" # [PAPER-SPECIFIED: Video/shot level, never random frames]
+  training:
+    # [NOT SPECIFIED IN PAPER - CONFIGURABLE]
+    batch_size: 16
+    input_size: [224, 224]
+    epochs: 50
+    learning_rate: 0.0001
+    optimizer: "AdamW"
+    weight_decay: 0.01
+    metric_loss: "MultiSimilarityLoss" # [NOT SPECIFIED IN PAPER - CONFIGURABLE]
+
+augmentation:
+  # [PAPER-SPECIFIED]
+  random_crop: true
+  random_grayscale: true
+  random_color_jitter: true
+  random_lighting: true
+  randaugment: true
+  params:
+    crop_scale: [0.8, 1.0]
+    jitter_brightness: 0.2
+    jitter_contrast: 0.2
+    jitter_saturation: 0.2
+    jitter_hue: 0.1
+    randaugment_num_ops: 2
+    randaugment_magnitude: 9
+
+fusion:
+  # [PAPER-SPECIFIED: EXACT FORMULA & WEIGHTS]
+  representation_weight: 1.0 # [PAPER-SPECIFIED]
+  metric_num: 1.0            # [PAPER-SPECIFIED]
+  metric_const: 0.1          # [PAPER-SPECIFIED: weight = 1 / (0.1 + d)]
+  conf_threshold: 0.95       # [PAPER-SPECIFIED]
+  distance_threshold: 0.4    # [PAPER-SPECIFIED]
+  open_world_distance_benchmarks: # [PAPER-SPECIFIED]
+    - 0.10
+    - 0.08
+    - 0.05
+    - 0.02
+    - 0.01
+
+ecology:
+  home_range_method: "mcp_100" # [PAPER-SPECIFIED: 100% Minimum Convex Polygon]
+  spatial_crs: "EPSG:4326"
