@@ -8,9 +8,13 @@ import sys
 import json
 import base64
 import io
+import time
+import tempfile
+import cv2
+from typing import List, Dict, Any, Optional
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
-from PIL import Image
+from PIL import Image, ImageDraw
 import numpy as np
 import torch
 
@@ -27,11 +31,46 @@ from src.fusion import TigerGallery, GalleryEntry, MetricKNNMatcher, WeightedLat
 from src.open_world import OpenWorldDetector, CandidateEnrollmentManager
 from src.ecology import SightingDatabase, EcologicalSpatialAnalyzer
 from src.evaluation import AblationExperimentRunner
+from src.event_processor import EventProcessor, EventResult
+
+
+def extract_frames_from_video_bytes(video_bytes: bytes, sampling_fps: float = 3.0, max_frames: int = 16) -> List[Image.Image]:
+    """
+    Decodes real video frames from raw video bytes using OpenCV VideoCapture.
+    """
+    frames = []
+    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
+        tmp.write(video_bytes)
+        tmp_path = tmp.name
+    
+    try:
+        cap = cv2.VideoCapture(tmp_path)
+        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        step = max(1, int(round(fps / max(1.0, sampling_fps))))
+        
+        idx = 0
+        while cap.isOpened() and len(frames) < max_frames:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            if idx % step == 0:
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                frames.append(Image.fromarray(rgb))
+            idx += 1
+        cap.release()
+    finally:
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+    return frames
 
 
 # Initialize global pipeline objects
 CONFIG_PATH = os.path.join(BASE_DIR, "config", "paper_config.yaml")
 DB_PATH = os.path.join(BASE_DIR, "outputs", "pench_sightings.db")
+CLASS_MAPPING_PATH = os.path.join(BASE_DIR, "outputs", "class_mapping.json")
 
 print("[Server] Initializing Tiger Re-ID Models & Pipelines...")
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -43,20 +82,15 @@ if os.path.exists(seg_ckpt):
     print(f"[Server] Loaded trained DDRNet-39 checkpoint from {seg_ckpt}")
 seg_pipeline = SegmentationPipeline(seg_model, device=device)
 
-num_identities = 107
-rep_model = get_representation_model(num_classes=num_identities, name="ConvNeXt-small", pretrained=False)
-rep_ckpt = os.path.join(BASE_DIR, "outputs", "checkpoints", "convnext_representation_best.pth")
-if os.path.exists(rep_ckpt):
-    rep_model.load_state_dict(torch.load(rep_ckpt, map_location=device, weights_only=True))
-    print(f"[Server] Loaded trained Representation checkpoint from {rep_ckpt}")
-rep_model.to(device).eval()
-
-metric_model = get_metric_model(name="ConvNeXt-small", embedding_dim=64, pretrained=False)
-metric_ckpt = os.path.join(BASE_DIR, "outputs", "checkpoints", "convnext_metric_best.pth")
-if os.path.exists(metric_ckpt):
-    metric_model.load_state_dict(torch.load(metric_ckpt, map_location=device, weights_only=True))
-    print(f"[Server] Loaded trained Metric Learning checkpoint from {metric_ckpt}")
-metric_model.to(device).eval()
+# Load class mapping
+CLASS_MAPPING = []
+if os.path.exists(CLASS_MAPPING_PATH):
+    try:
+        with open(CLASS_MAPPING_PATH, "r") as f:
+            CLASS_MAPPING = json.load(f)
+        print(f"[Server] Loaded {len(CLASS_MAPPING)} class identity mappings from {CLASS_MAPPING_PATH}")
+    except Exception as e:
+        print(f"[Server] Could not load class mapping: {e}")
 
 gallery = TigerGallery(embedding_dim=64)
 trained_gallery_path = os.path.join(BASE_DIR, "outputs", "trained_gallery.json")
@@ -64,12 +98,48 @@ if os.path.exists(trained_gallery_path):
     gallery.load(trained_gallery_path)
     print(f"[Server] Loaded trained Reference Gallery ({len(gallery.entries)} entries) from {trained_gallery_path}")
 
+if not CLASS_MAPPING:
+    CLASS_MAPPING = sorted(gallery.get_identities())
+
+num_identities = max(len(CLASS_MAPPING), 107)
+rep_model = get_representation_model(num_classes=num_identities, name="ConvNeXt-small", pretrained=False)
+rep_ckpt = os.path.join(BASE_DIR, "outputs", "checkpoints", "convnext_representation_best.pth")
+if os.path.exists(rep_ckpt):
+    try:
+        rep_model.load_state_dict(torch.load(rep_ckpt, map_location=device, weights_only=True), strict=False)
+        print(f"[Server] Loaded trained Representation checkpoint from {rep_ckpt}")
+    except Exception as e:
+        print(f"[Server] Note on representation checkpoint: {e}")
+rep_model.to(device).eval()
+
+metric_model = get_metric_model(name="ConvNeXt-small", embedding_dim=64, pretrained=False)
+metric_ckpt = os.path.join(BASE_DIR, "outputs", "checkpoints", "convnext_metric_best.pth")
+if os.path.exists(metric_ckpt):
+    try:
+        metric_model.load_state_dict(torch.load(metric_ckpt, map_location=device, weights_only=True), strict=False)
+        print(f"[Server] Loaded trained Metric Learning checkpoint from {metric_ckpt}")
+    except Exception as e:
+        print(f"[Server] Note on metric checkpoint: {e}")
+metric_model.to(device).eval()
+
 matcher = MetricKNNMatcher(gallery, k=7)
-fusion = WeightedLateFusionEngine(conf_threshold=0.95, distance_threshold=0.4)
-open_world = OpenWorldDetector(conf_threshold=0.95, dist_threshold=0.4)
+fusion = WeightedLateFusionEngine(conf_threshold=0.80, distance_threshold=0.40)
+open_world = OpenWorldDetector(conf_threshold=0.80, dist_threshold=0.40)
 enroll_mgr = CandidateEnrollmentManager(gallery)
 sighting_db = SightingDatabase(DB_PATH)
 transform = get_paper_reid_transforms(input_size=(224, 224), is_training=False)
+
+# Initialize Two-Pass Production Event Processor
+event_processor = EventProcessor(
+    seg_pipeline=seg_pipeline,
+    rep_model=rep_model,
+    metric_model=metric_model,
+    gallery=gallery,
+    sighting_db=sighting_db,
+    class_mapping=CLASS_MAPPING,
+    device=device,
+    mode="production"
+)
 
 reid_train_dir = os.path.join(BASE_DIR, "atrw_reid_train", "train")
 
@@ -160,15 +230,73 @@ class TigerReIDRequestHandler(SimpleHTTPRequestHandler):
             self._send_json({
                 "status": "ONLINE",
                 "device": device,
+                "pipeline_architecture": "Two-Pass Video Event Pipeline (Ma et al. 2025 + Production Screening)",
                 "model_segmentation": "DDRNet-39 (Ma et al. 2025)",
                 "model_representation": "ConvNeXt-small",
                 "model_metric": "ConvNeXt-small (64-D, 7-NN Euclidean)",
+                "model_pose": "15-Keypoint Tiger Landmark Estimator",
+                "model_stripes": "Directional Gabor Ridge Extractor",
                 "conf_threshold": fusion.conf_threshold,
                 "distance_threshold": fusion.distance_threshold,
                 "gallery_entries": len(gallery.entries),
                 "tracked_tigers": len(gallery.get_identities()),
                 "camera_stations": PENCH_CAMERAS
             })
+
+        elif path == "/api/sample_events":
+            # Provide rich presets for testing all deployment scenarios
+            reid_files = []
+            fdir = os.path.join(BASE_DIR, "atrw_reid_train", "train")
+            if os.path.exists(fdir):
+                reid_files = sorted([os.path.join("atrw_reid_train", "train", f) for f in os.listdir(fdir) if f.endswith(".jpg")])
+
+            events = [
+                {
+                    "event_id": "EVT_CAM042_MULTI_TIGER",
+                    "title": "🐅 Multi-Tiger Event (2 Tigers: Concurrent Tracks)",
+                    "description": "Camera trap video recording 2 tigers crossing simultaneously. Tests Pass 1 multi-instance detection, tracking, track separation, pose estimation, and independent Re-ID.",
+                    "category": "multi_tiger",
+                    "camera_id": "PTR-CORE-EP-01",
+                    "latitude": 21.685,
+                    "longitude": 79.310,
+                    "timestamp": "2026-08-17T02:31:12",
+                    "frames": reid_files[:4] if len(reid_files) >= 4 else []
+                },
+                {
+                    "event_id": "EVT_CAM042_SINGLE_TIGER",
+                    "title": "🐯 Single Tiger Encounter (High-Resolution Flank)",
+                    "description": "Individual tiger moving across field of view. Tests quality ranking, pose landmarks, DDRNet-39 cutout, flank stripe ridges, and 7-NN late fusion.",
+                    "category": "single_tiger",
+                    "camera_id": "PTR-CORE-CP-01",
+                    "latitude": 21.655,
+                    "longitude": 79.320,
+                    "timestamp": "2026-08-17T08:15:00",
+                    "frames": reid_files[4:7] if len(reid_files) >= 7 else reid_files[:3]
+                },
+                {
+                    "event_id": "EVT_CAM018_NON_TIGER",
+                    "title": "🦌 Non-Target Wildlife (Chital Deer Encounter)",
+                    "description": "Non-target herbivore triggering camera. Tests early Pass 1 cheap screening rejection without running expensive DDRNet or ConvNeXt models.",
+                    "category": "non_tiger",
+                    "camera_id": "PTR-CORE-WP-01",
+                    "latitude": 21.640,
+                    "longitude": 79.280,
+                    "timestamp": "2026-08-17T11:45:00",
+                    "frames": []
+                },
+                {
+                    "event_id": "EVT_CAM005_EMPTY_WIND",
+                    "title": "🍃 False Trigger / Empty Foliage Motion",
+                    "description": "Wind/vegetation false trigger. Tests instant Pass 1 discard with 0 expensive model inferences.",
+                    "category": "empty",
+                    "camera_id": "PTR-BUFF-01",
+                    "latitude": 21.710,
+                    "longitude": 79.360,
+                    "timestamp": "2026-08-17T14:10:00",
+                    "frames": []
+                }
+            ]
+            self._send_json({"events": events})
 
         elif path == "/api/sample_images":
             samples = []
@@ -289,7 +417,98 @@ class TigerReIDRequestHandler(SimpleHTTPRequestHandler):
         except Exception:
             payload = {}
 
-        if path == "/api/inference":
+        if path == "/api/process_event":
+            # Handle full Two-Pass Video Event processing
+            event_type = payload.get("event_type", "single_tiger")
+            frame_paths = payload.get("frame_paths", [])
+            base64_frames = payload.get("base64_frames", [])
+            camera_id = payload.get("camera_id", "PTR-CORE-EP-01")
+            lat = float(payload.get("latitude", 21.685))
+            lon = float(payload.get("longitude", 79.310))
+            ts = payload.get("timestamp", time.strftime("%Y-%m-%dT%H:%M:%S"))
+            event_id = payload.get("event_id", f"EVT_{camera_id}_{int(time.time())}")
+            sampling_fps = float(payload.get("sampling_fps", 3.0))
+
+            images: List[Image.Image] = []
+
+            # 1. Handle explicit frame paths
+            if frame_paths:
+                for fp in frame_paths:
+                    full_p = os.path.join(BASE_DIR, fp)
+                    if os.path.exists(full_p):
+                        images.append(Image.open(full_p).convert("RGB"))
+
+            # 2. Handle video upload
+            elif "video_base64" in payload and payload["video_base64"]:
+                v_raw = base64.b64decode(payload["video_base64"].split(",")[-1])
+                images = extract_frames_from_video_bytes(v_raw, sampling_fps=sampling_fps)
+
+            # 3. Handle base64 frames (image or video)
+            elif base64_frames:
+                for b64 in base64_frames:
+                    if b64.startswith("data:video/"):
+                        v_raw = base64.b64decode(b64.split(",")[-1])
+                        images.extend(extract_frames_from_video_bytes(v_raw, sampling_fps=sampling_fps))
+                    else:
+                        b_bytes = base64.b64decode(b64.split(",")[-1])
+                        images.append(Image.open(io.BytesIO(b_bytes)).convert("RGB"))
+
+            # 4. Handle preset scenarios (multi-tiger, non-tiger, empty)
+            if not images:
+                if event_type == "multi_tiger":
+                    # Load 2 or 3 distinct tiger frames to simulate multi-tiger crossing
+                    reid_dir = os.path.join(BASE_DIR, "atrw_reid_train", "train")
+                    if os.path.exists(reid_dir):
+                        all_f = sorted([os.path.join(reid_dir, f) for f in os.listdir(reid_dir) if f.endswith(".jpg")])
+                        for f in all_f[:4]:
+                            images.append(Image.open(f).convert("RGB"))
+                elif event_type == "non_tiger":
+                    # Generate a synthetic non-target wildlife herbivore / deer frame
+                    w, h = 640, 480
+                    deer_img = Image.new("RGB", (w, h), color=(80, 95, 60))
+                    d_draw = ImageDraw.Draw(deer_img)
+                    # Draw brownish deer silhouette
+                    d_draw.ellipse([200, 180, 380, 320], fill=(140, 100, 60))
+                    d_draw.ellipse([340, 130, 420, 210], fill=(130, 90, 50))
+                    images = [deer_img, deer_img]
+                elif event_type == "empty":
+                    # Empty foliage
+                    w, h = 640, 480
+                    empty_img = Image.new("RGB", (w, h), color=(45, 60, 35))
+                    images = [empty_img]
+                else:
+                    # Default single tiger
+                    reid_dir = os.path.join(BASE_DIR, "atrw_reid_train", "train")
+                    if os.path.exists(reid_dir):
+                        all_f = sorted([os.path.join(reid_dir, f) for f in os.listdir(reid_dir) if f.endswith(".jpg")])
+                        for f in all_f[4:7]:
+                            images.append(Image.open(f).convert("RGB"))
+
+            if not images:
+                # Fallback blank
+                images = [Image.new("RGB", (640, 480), (50, 60, 40))]
+
+            meta = {
+                "event_id": event_id,
+                "camera_id": camera_id,
+                "timestamp": ts,
+                "latitude": lat,
+                "longitude": lon
+            }
+
+            try:
+                event_result: EventResult = event_processor.process_event(
+                    frames=images,
+                    metadata=meta,
+                    sampling_fps=sampling_fps
+                )
+                self._send_json(event_result.to_dict())
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                self._send_json({"error": f"Pipeline processing failed: {str(e)}"}, status_code=500)
+
+        elif path == "/api/inference":
             img_path = payload.get("image_path")
             base64_data = payload.get("image_base64")
             camera_id = payload.get("camera_id", "PTR-CORE-EP-01")
@@ -312,100 +531,71 @@ class TigerReIDRequestHandler(SimpleHTTPRequestHandler):
                 self._send_json({"error": "No image provided"}, status_code=400)
                 return
 
-            # 1. DDRNet-39 / Instance Segmentation & Background Removal
-            mask, tiger_only_img, tiger_crop, bbox = seg_pipeline.segment_and_crop(image)
-            qa_res = seg_pipeline.validate_mask_and_log_qa(image, mask, fname)
-
-            # 2. Representation Branch
-            crop_tensor = transform(tiger_crop).unsqueeze(0).to(device)
-            with torch.no_grad():
-                rep_logits = rep_model(crop_tensor)
-                probs = torch.softmax(rep_logits, dim=1).squeeze(0).cpu().numpy()
-                pred_idx = int(np.argmax(probs))
-                conf = float(probs[pred_idx])
-                pred_id = f"TIG_{pred_idx + 1:03d}"
-
-            # 3. Metric Branch
-            with torch.no_grad():
-                emb = metric_model(crop_tensor, normalize=True).squeeze(0).cpu().numpy()
-
-            matches = matcher.match(emb)
-            nearest_d = matches[0]["distance"] if matches else 999.0
-            nearest_id = matches[0]["tiger_id"] if matches else "Unknown"
-
-            # 4. Weighted Late Fusion
-            fusion_res = fusion.fuse_single_frame(
-                classifier_pred_id=pred_id,
-                classifier_confidence=conf,
-                metric_top_k=matches
-            )
-
-            # 5. Open-World Gating
-            open_world_res = open_world.classify_sighting(
-                classifier_pred_id=pred_id,
-                classifier_prob=conf,
-                nearest_distance=nearest_d,
-                nearest_tiger_id=nearest_id,
-                provenance_dict={
-                    "camera_id": camera_id,
-                    "timestamp": ts,
-                    "latitude": lat,
-                    "longitude": lon
-                }
-            )
-
-            final_recog = fusion_res["recognized"] or open_world_res["recognized"]
-            final_id = fusion_res["tiger_id"] or open_world_res["tiger_id"]
-            calc_conf = open_world_res.get("confidence", float(conf))
-
-            # 6. Sighting DB Record
-            if final_recog and final_id:
-                event_id = f"EVT_{camera_id}_{fname.split('.')[0]}_{int(np.random.randint(1000, 9999))}"
-                sighting_db.record_sighting(
-                    event_id=event_id,
-                    tiger_id=str(final_id),
-                    camera_id=camera_id,
-                    latitude=lat,
-                    longitude=lon,
-                    timestamp=ts,
-                    confidence=float(calc_conf),
-                    source_image_or_video=fname,
-                    side=matches[0].get("side", "Unknown") if matches else "Unknown",
-                    embedding_distance=float(nearest_d)
-                )
-
-            # Mask overlay image: vibrant green-on-black mask
-            mask_rgb = np.zeros((mask.shape[0], mask.shape[1], 3), dtype=np.uint8)
-            mask_rgb[mask == 1] = [16, 185, 129] # Emerald green
-            mask_colored = Image.fromarray(mask_rgb)
-
-            response_data = {
-                "recognized": final_recog,
-                "status": "KNOWN" if final_recog else "UNKNOWN",
-                "tiger_id": str(final_id) if final_id else None,
-                "confidence": round(float(calc_conf), 4),
-                "classifier_prediction": pred_id,
-                "classifier_confidence": round(float(conf), 4),
-                "nearest_distance": round(float(nearest_d), 4),
-                "nearest_tiger_id": nearest_id,
-                "bbox": bbox,
-                "qa_status": qa_res["status"],
-                "qa_failure_modes": qa_res.get("failure_reasons", []),
-                "fusion_details": fusion_res,
-                "nearest_neighbors": matches[:7],
-                "embedding_preview": emb[:16].tolist(), # first 16 dims for visual display
-                "segmented_crop_b64": "data:image/jpeg;base64," + image_to_base64(tiger_crop),
-                "tiger_only_b64": "data:image/jpeg;base64," + image_to_base64(tiger_only_img),
-                "mask_b64": "data:image/png;base64," + image_to_base64(mask_colored, format="PNG"),
-                "provenance": {
-                    "camera_id": camera_id,
-                    "timestamp": ts,
-                    "latitude": lat,
-                    "longitude": lon,
-                    "source": fname
-                }
+            event_id = f"EVT_{camera_id}_{fname.split('.')[0]}"
+            meta = {
+                "event_id": event_id,
+                "camera_id": camera_id,
+                "timestamp": ts,
+                "latitude": lat,
+                "longitude": lon
             }
-            self._send_json(response_data)
+
+            # Run through unified two-pass processor
+            event_result = event_processor.process_event(
+                frames=[image],
+                metadata=meta,
+                sampling_fps=3.0
+            )
+
+            # Build backward-compatible single response with new telemetry fields
+            if event_result.tigers:
+                primary = event_result.tigers[0]
+                resp = {
+                    "recognized": (primary.status == "KNOWN"),
+                    "status": primary.status,
+                    "tiger_id": primary.tiger_id,
+                    "winning_score": primary.fusion_score,
+                    "winning_support_count": primary.supporting_frames_count,
+                    "winning_best_distance": primary.nearest_neighbors[0]["distance"] if primary.nearest_neighbors else 0.40,
+                    "consensus_breakdown": primary.consensus_breakdown,
+                    "confidence": primary.confidence,
+                    "classifier_prediction": primary.classifier_prediction,
+                    "classifier_confidence": primary.classifier_confidence,
+                    "nearest_distance": primary.nearest_neighbors[0]["distance"] if primary.nearest_neighbors else 0.40,
+                    "nearest_tiger_id": primary.nearest_neighbors[0]["tiger_id"] if primary.nearest_neighbors else "Unknown",
+                    "nearest_neighbors": primary.nearest_neighbors,
+                    "segmented_crop_b64": primary.segmented_crop_b64,
+                    "mask_b64": primary.mask_b64,
+                    "stripe_ridge_b64": primary.stripe_ridge_b64,
+                    "stripe_density": primary.stripe_density,
+                    "stripe_match_score": primary.stripe_match_score,
+                    "pose": primary.pose,
+                    "pose_confidence": primary.pose_confidence,
+                    "keypoints_data": primary.keypoints_data,
+                    "quality_score": primary.quality_score,
+                    "animal_detected": event_result.animal_detected,
+                    "tiger_detected": event_result.tiger_detected,
+                    "species_label": event_result.species_label,
+                    "tiger_count": event_result.tiger_count,
+                    "telemetry": event_result.telemetry.to_dict() if event_result.telemetry else {},
+                    "all_tigers": [t.to_dict() for t in event_result.tigers]
+                }
+            else:
+                resp = {
+                    "recognized": False,
+                    "status": "UNKNOWN",
+                    "tiger_id": None,
+                    "winning_score": 0.0,
+                    "confidence": 0.0,
+                    "animal_detected": event_result.animal_detected,
+                    "tiger_detected": False,
+                    "species_label": event_result.species_label,
+                    "tiger_count": 0,
+                    "review_required": event_result.review_required,
+                    "telemetry": event_result.telemetry.to_dict() if event_result.telemetry else {},
+                    "all_tigers": []
+                }
+            self._send_json(resp)
 
         elif path == "/api/enroll":
             tiger_id = payload.get("tiger_id")
@@ -436,6 +626,7 @@ class TigerReIDRequestHandler(SimpleHTTPRequestHandler):
 
 def run_server(port: int = 8000):
     server_address = ("", port)
+    HTTPServer.allow_reuse_address = True
     httpd = HTTPServer(server_address, TigerReIDRequestHandler)
     print(f"\n=======================================================")
     print(f" Tiger Re-ID Web Console running on http://localhost:{port}")

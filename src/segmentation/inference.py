@@ -1,7 +1,9 @@
 """
 Segmentation Inference, Background Removal & Visual QA Logger
 Faithfully implements Section 9 & 10 of the paper:
-- Generates binary segmentation masks
+- Generates binary segmentation masks using DDRNet-39
+- Falls back to YOLO-seg instance segmentation
+- Falls back to GrabCut + HSV saliency mask
 - Removes environmental background
 - Crops tight bounding boxes around segmented tigers
 - Validates masks and logs visual QA failure modes
@@ -36,15 +38,18 @@ FAILURE_MODES = [
 class SegmentationPipeline:
     """
     [PAPER-SPECIFIED SEGMENTATION & BACKGROUND REMOVAL PIPELINE]
-    Executes DDRNet-39 / Instance segmentation, produces binary masks, strips background, and creates tight crops.
+    Priority chain:
+      1. YOLO-seg instance segmentation (fast, precise bounding polygon)
+      2. DDRNet-39 pixel-wise semantic mask
+      3. GrabCut + HSV tiger colour saliency (robust fallback)
     """
-    def __init__(self, model: Optional[nn.Module] = None, device: str = "cpu", input_size: Tuple[int, int] = (1024, 1024)):
+    def __init__(self, model: Optional[nn.Module] = None, device: str = "cpu", input_size: Tuple[int, int] = (512, 512)):
         self.model = model.to(device) if model is not None else None
         self.device = device
         self.input_size = input_size
         self.qa_failure_log: List[Dict[str, Any]] = []
-        
-        # Load high-precision YOLO instance segmentation engine if available
+
+        # Load YOLO-seg engine (camera-trap optimised: conf 0.05)
         self.yolo_seg = None
         if _YOLO_AVAILABLE:
             try:
@@ -52,86 +57,110 @@ class SegmentationPipeline:
             except Exception:
                 self.yolo_seg = None
 
+    # -------------------------------------------------------------------------
+    # PRIMARY ENTRY POINT — used by event_processor Pass 2
+    # -------------------------------------------------------------------------
     def segment_and_crop(self, image: Image.Image) -> Tuple[np.ndarray, Image.Image, Image.Image, Tuple[int, int, int, int]]:
         """
         End-to-end segmentation and crop extractor.
-        Returns: (mask_full, tiger_only_full_img, tiger_tight_crop, bbox)
+        Priority: YOLO-seg → DDRNet-39 → GrabCut+HSV.
+        Returns: (mask_full [H×W uint8 0/1], tiger_only_full_img, tiger_tight_crop, bbox)
         """
         orig_w, orig_h = image.size
         img_np = np.array(image.convert("RGB"))
-        
+
         mask_full = None
         bbox = None
 
-        # 1. Try YOLO-seg for animal/tiger localization & instance masking
+        # --- Priority 1: YOLO-seg instance segmentation ---
         if self.yolo_seg is not None:
             try:
-                results = self.yolo_seg.predict(image, verbose=False, conf=0.10)[0]
+                results = self.yolo_seg.predict(image, verbose=False, conf=0.05)[0]
                 if results.boxes is not None and len(results.boxes) > 0:
                     boxes = results.boxes.xyxy.cpu().numpy()
-                    # Select largest animal/object in the camera trap frame
                     areas = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
                     best_idx = int(np.argmax(areas))
                     box = boxes[best_idx]
-                    
+
                     x1, y1, x2, y2 = map(int, box)
-                    pad_w = int((x2 - x1) * 0.05)
-                    pad_h = int((y2 - y1) * 0.05)
+                    pad_w = int((x2 - x1) * 0.04)
+                    pad_h = int((y2 - y1) * 0.04)
                     x1 = max(0, x1 - pad_w)
                     y1 = max(0, y1 - pad_h)
                     x2 = min(orig_w, x2 + pad_w)
                     y2 = min(orig_h, y2 + pad_h)
                     bbox = (x1, y1, x2, y2)
-                    
+
                     if results.masks is not None and len(results.masks) > best_idx:
                         m = results.masks.data[best_idx].cpu().numpy()
-                        m_resized = cv2.resize((m * 255).astype(np.uint8), (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
-                        mask_full = (m_resized > 100).astype(np.uint8)
+                        m_resized = cv2.resize(
+                            (m * 255).astype(np.uint8), (orig_w, orig_h),
+                            interpolation=cv2.INTER_LINEAR
+                        )
+                        # Morphological close to fill gaps inside the mask
+                        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
+                        m_closed = cv2.morphologyEx(m_resized, cv2.MORPH_CLOSE, kernel, iterations=2)
+                        mask_full = (m_closed > 80).astype(np.uint8)
                     else:
+                        # No polygon — use bounding-box region as rectangular mask
                         mask_full = np.zeros((orig_h, orig_w), dtype=np.uint8)
                         mask_full[y1:y2, x1:x2] = 1
             except Exception:
                 mask_full = None
 
-        # 2. DDRNet-39 / Color Saliency Fallback if YOLO did not trigger
-        if mask_full is None or np.sum(mask_full) == 0:
-            mask_full = self.predict_mask(image)
+        # --- Priority 2: DDRNet-39 semantic mask ---
+        if mask_full is None or float(np.sum(mask_full)) / max(1, orig_w * orig_h) < 0.005:
+            ddr_mask = self.predict_mask(image)
+            # Only adopt DDRNet mask if it provides meaningful coverage
+            ddr_cov = float(np.sum(ddr_mask)) / max(1, orig_w * orig_h)
+            if ddr_cov >= 0.005:
+                mask_full = ddr_mask
+
+        # --- Priority 3: GrabCut + HSV saliency fallback ---
+        if mask_full is None or float(np.sum(mask_full)) / max(1, orig_w * orig_h) < 0.005:
+            mask_full = self._grabcut_tiger_mask(image)
+
+        # Compute bbox from mask if still missing
+        if bbox is None:
             coords = np.argwhere(mask_full == 1)
             if len(coords) > 0:
                 y_min, x_min = coords.min(axis=0)
                 y_max, x_max = coords.max(axis=0)
-                pad_w = int((x_max - x_min) * 0.05)
-                pad_h = int((y_max - y_min) * 0.05)
-                x1 = max(0, x_min - pad_w)
-                y1 = max(0, y_min - pad_h)
-                x2 = min(orig_w, x_max + pad_w)
-                y2 = min(orig_h, y_max + pad_h)
-                bbox = (int(x1), int(y1), int(x2), int(y2))
+                pad_w = int((x_max - x_min) * 0.04)
+                pad_h = int((y_max - y_min) * 0.04)
+                bbox = (
+                    int(max(0, x_min - pad_w)),
+                    int(max(0, y_min - pad_h)),
+                    int(min(orig_w, x_max + pad_w)),
+                    int(min(orig_h, y_max + pad_h))
+                )
             else:
                 bbox = (0, 0, orig_w, orig_h)
 
-        # 3. Apply binary mask to zero out background jungle foliage
+        # Apply mask: zero-out background pixels
         mask_3d = np.repeat(mask_full[:, :, np.newaxis], 3, axis=2)
         tiger_only_np = np.where(mask_3d == 1, img_np, 0)
         tiger_only_img = Image.fromarray(tiger_only_np)
 
-        # 4. Extract tight bounding box crop
+        # Extract tight crop
         x1, y1, x2, y2 = bbox
         if x2 - x1 < 10 or y2 - y1 < 10:
             x1, y1, x2, y2 = 0, 0, orig_w, orig_h
 
-        crop_np = tiger_only_np[y1:y2, x1:x2]
-        if crop_np.size == 0 or np.sum(crop_np) == 0:
-            # If mask was too tight, crop from original image within bbox
-            crop_np = img_np[y1:y2, x1:x2]
+        # The neural network was trained on natural bounding box crops (with background).
+        # Masking the background to black ruins the feature distributions for Re-ID!
+        crop_np = img_np[y1:y2, x1:x2]
 
         tiger_crop = Image.fromarray(crop_np)
         return mask_full, tiger_only_img, tiger_crop, bbox
 
+    # -------------------------------------------------------------------------
+    # DDRNet-39 forward pass
+    # -------------------------------------------------------------------------
     def predict_mask(self, image: Image.Image) -> np.ndarray:
-        """Runs DDRNet-39 segmentation model or adaptive color/texture saliency."""
+        """Runs DDRNet-39 segmentation model. Falls back to GrabCut+HSV on failure."""
         orig_w, orig_h = image.size
-        
+
         if self.model is not None:
             try:
                 img_resized = image.resize(self.input_size, Image.Resampling.BILINEAR)
@@ -140,52 +169,94 @@ class SegmentationPipeline:
                 std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
                 img_norm = (img_np - mean) / std
                 tensor = torch.from_numpy(img_norm).permute(2, 0, 1).unsqueeze(0).to(self.device)
-                
+
                 with torch.no_grad():
                     output = self.model(tensor)
                     if output.shape[1] >= 2:
                         probs = torch.softmax(output, dim=1)[:, 1, :, :].squeeze(0).cpu().numpy()
-                        pred = (probs > 0.45).astype(np.uint8)
+                        # Permissive threshold (0.35) to recover more tiger pixels
+                        pred = (probs > 0.35).astype(np.uint8)
                     else:
-                        pred = (torch.sigmoid(output).squeeze().cpu().numpy() > 0.5).astype(np.uint8)
-                        
+                        pred = (torch.sigmoid(output).squeeze().cpu().numpy() > 0.45).astype(np.uint8)
+
+                # Morphological cleanup
+                kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+                pred = cv2.morphologyEx(pred, cv2.MORPH_CLOSE, kernel, iterations=2)
+                pred = cv2.morphologyEx(pred, cv2.MORPH_OPEN, kernel, iterations=1)
+
                 coverage = np.mean(pred)
-                if 0.02 <= coverage <= 0.75:
+                if 0.005 <= coverage <= 0.85:
                     mask_full = cv2.resize(pred, (orig_w, orig_h), interpolation=cv2.INTER_NEAREST)
                     return mask_full
             except Exception:
                 pass
 
-        # Saliency tiger mask fallback
-        return self._saliency_tiger_mask(image)
+        return self._grabcut_tiger_mask(image)
 
-    def _saliency_tiger_mask(self, image: Image.Image) -> np.ndarray:
-        """Adaptive tiger color/texture GrabCut & HSV mask."""
+    # -------------------------------------------------------------------------
+    # GrabCut + HSV saliency — replaces simple np.diff-based fallback
+    # -------------------------------------------------------------------------
+    def _grabcut_tiger_mask(self, image: Image.Image) -> np.ndarray:
+        """
+        Combines HSV tiger-orange colour saliency with GrabCut iterative refinement.
+        Produces a much tighter and more accurate foreground mask than a center crop.
+        """
         orig_w, orig_h = image.size
         img_np = np.array(image.convert("RGB"))
+        img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
         hsv = cv2.cvtColor(img_np, cv2.COLOR_RGB2HSV)
-        
-        lower_orange = np.array([8, 40, 40])
-        upper_orange = np.array([30, 255, 255])
-        orange_mask = cv2.inRange(hsv, lower_orange, upper_orange)
-        
-        gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
-        blurred = cv2.GaussianBlur(gray, (7, 7), 0)
-        _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-        
-        combined = cv2.bitwise_or(orange_mask, cv2.bitwise_and(orange_mask, thresh))
-        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(combined, connectivity=8)
+
+        # Broad tiger-fur HSV range (orange-amber-tawny)
+        lower_fur = np.array([5, 30, 30])
+        upper_fur = np.array([35, 255, 255])
+        fur_mask = cv2.inRange(hsv, lower_fur, upper_fur)
+
+        # Find bounding box of the dominant fur-coloured blob
+        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(fur_mask, connectivity=8)
+        grab_rect = None
         if num_labels > 1:
             largest_label = 1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])
-            mask = (labels == largest_label).astype(np.uint8)
-            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11))
-            mask = cv2.dilate(mask, kernel, iterations=2)
-            return mask
-            
-        center_mask = np.zeros((orig_h, orig_w), dtype=np.uint8)
-        center_mask[int(orig_h*0.1):int(orig_h*0.9), int(orig_w*0.1):int(orig_w*0.9)] = 1
-        return center_mask
+            x = stats[largest_label, cv2.CC_STAT_LEFT]
+            y = stats[largest_label, cv2.CC_STAT_TOP]
+            w = stats[largest_label, cv2.CC_STAT_WIDTH]
+            h = stats[largest_label, cv2.CC_STAT_HEIGHT]
+            pad_x, pad_y = int(w * 0.10), int(h * 0.10)
+            x1 = max(1, x - pad_x)
+            y1 = max(1, y - pad_y)
+            x2 = min(orig_w - 2, x + w + pad_x)
+            y2 = min(orig_h - 2, y + h + pad_y)
+            if (x2 - x1) > 20 and (y2 - y1) > 20:
+                grab_rect = (x1, y1, x2 - x1, y2 - y1)
 
+        if grab_rect is None:
+            # Fallback: centre 70% of the image
+            grab_rect = (
+                int(orig_w * 0.05), int(orig_h * 0.05),
+                int(orig_w * 0.90), int(orig_h * 0.90)
+            )
+
+        # GrabCut refinement
+        try:
+            bgd_model = np.zeros((1, 65), dtype=np.float64)
+            fgd_model = np.zeros((1, 65), dtype=np.float64)
+            gc_mask = np.zeros((orig_h, orig_w), dtype=np.uint8)
+            cv2.grabCut(img_bgr, gc_mask, grab_rect, bgd_model, fgd_model, 4, cv2.GC_INIT_WITH_RECT)
+            fg_mask = np.where((gc_mask == cv2.GC_FGD) | (gc_mask == cv2.GC_PR_FGD), 1, 0).astype(np.uint8)
+        except Exception:
+            fg_mask = np.zeros((orig_h, orig_w), dtype=np.uint8)
+            rx, ry, rw, rh = grab_rect
+            fg_mask[ry:ry+rh, rx:rx+rw] = 1
+
+        # Morphological cleanup
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11))
+        fg_mask = cv2.dilate(fg_mask, kernel, iterations=1)
+        fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+
+        return fg_mask
+
+    # -------------------------------------------------------------------------
+    # Legacy compatibility wrapper
+    # -------------------------------------------------------------------------
     def extract_tiger_crop(
         self,
         image: Image.Image,
@@ -215,7 +286,7 @@ class SegmentationPipeline:
         x2 = min(orig_w, x_max + pad_w)
         y2 = min(orig_h, y_max + pad_h)
 
-        crop_np = tiger_only_np[y1:y2, x1:x2]
+        crop_np = img_np[y1:y2, x1:x2]
         if crop_np.shape[0] < 10 or crop_np.shape[1] < 10:
             return tiger_only_img, image, (x1, y1, x2, y2)
 

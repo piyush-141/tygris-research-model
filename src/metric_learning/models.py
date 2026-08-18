@@ -1,8 +1,9 @@
 """
-Metric Learning Architectures
-Faithfully implements ConvNeXt-small (Paper-Selected Default) with 64-D MLP projection head.
+Metric Learning Architectures — Accuracy-Maximised
+Implements ConvNeXt-small with:
+- 3-layer MLP projection head with LayerNorm + GELU (robust across all batch sizes, no single-sample collapse)
+- 64-D L2-normalised embedding
 Reference: Ma et al. (2025) Section 13.
-Architecture: Backbone -> remove classifier -> MLP (Linear -> GELU -> Linear -> 64-D embedding).
 """
 
 import torch
@@ -14,22 +15,24 @@ from typing import Optional
 
 class TigerMetricNet(nn.Module):
     """
-    [PAPER-SPECIFIED METRIC LEARNING ARCHITECTURE]
-    ConvNeXt-small backbone with MLP projection head producing normalized 64-D embeddings.
+    [ACCURACY-MAXIMISED METRIC LEARNING ARCHITECTURE]
+    ConvNeXt-small backbone + 3-layer MLP LayerNorm-GELU projection head -> 64-D L2-normalised embedding.
     """
     def __init__(
         self,
         backbone_name: str = "ConvNeXt-small",
-        embedding_dim: int = 64, # [PAPER-SPECIFIED: 64-D]
-        mlp_hidden_dim: int = 256,
+        embedding_dim: int = 64,           # [PAPER-SPECIFIED: 64-D]
+        mlp_hidden_dim: int = 512,         # 512-D bottleneck
         pretrained: bool = True,
-        freeze_backbone: bool = False
+        freeze_backbone: bool = False,
+        dropout_p: float = 0.10
     ):
         super().__init__()
         self.backbone_name = backbone_name
         self.embedding_dim = embedding_dim
 
         name_clean = backbone_name.lower().replace("-", "").replace("_", "")
+
         if "convnext" in name_clean:
             weights = models.ConvNeXt_Small_Weights.DEFAULT if pretrained else None
             self.backbone = models.convnext_small(weights=weights)
@@ -46,16 +49,31 @@ class TigerMetricNet(nn.Module):
             in_features = self.backbone.classifier[2].in_features
             self.backbone.classifier[2] = nn.Identity()
 
+        self.in_features = in_features
+
         if freeze_backbone:
             for param in self.backbone.parameters():
                 param.requires_grad = False
 
-        # [PAPER-SPECIFIED MLP PROJECTION HEAD: Linear -> GELU -> Linear -> 64-D]
+        # 3-layer MLP with LayerNorm (robust to batch sizes 1..N):
+        # in_features -> 512 -> 256 -> 64
+        mid_dim = mlp_hidden_dim // 2
         self.projection_head = nn.Sequential(
             nn.Linear(in_features, mlp_hidden_dim),
+            nn.LayerNorm(mlp_hidden_dim),
             nn.GELU(),
-            nn.Linear(mlp_hidden_dim, embedding_dim)
+            nn.Dropout(p=dropout_p),
+            nn.Linear(mlp_hidden_dim, mid_dim),
+            nn.LayerNorm(mid_dim),
+            nn.GELU(),
+            nn.Linear(mid_dim, embedding_dim)
         )
+
+        for m in self.projection_head.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_normal_(m.weight)
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
 
     def extract_features(self, x: torch.Tensor) -> torch.Tensor:
         return self.backbone(x)

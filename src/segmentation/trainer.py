@@ -1,13 +1,46 @@
 """
-Semantic Segmentation Trainer & Evaluation Metrics
-Faithfully calculates TIoU (Tiger IoU), BIoU (Background IoU), and MIoU (Mean IoU).
+Semantic Segmentation Trainer & Evaluation Metrics — Accuracy-Maximised
+Implements:
+- Combined Loss (CrossEntropy + Soft Dice Loss) for handling class imbalance & crisp boundary delineation
+- Exact TIoU (Tiger IoU), BIoU (Background IoU), and MIoU (Mean IoU) calculations.
 Reference: Ma et al. (2025) Section 7 & 22.
 """
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from typing import Dict, Any, Tuple
 import numpy as np
+
+
+class DiceLoss(nn.Module):
+    """Soft Dice Loss for 2-class foreground-background semantic segmentation."""
+    def __init__(self, smooth: float = 1.0):
+        super().__init__()
+        self.smooth = smooth
+
+    def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        probs = torch.softmax(logits, dim=1)[:, 1]  # (B, H, W)
+        targets_f = (targets == 1).float()
+
+        intersection = torch.sum(probs * targets_f, dim=(1, 2))
+        cardinality = torch.sum(probs + targets_f, dim=(1, 2))
+
+        dice = (2.0 * intersection + self.smooth) / (cardinality + self.smooth)
+        return torch.mean(1.0 - dice)
+
+
+class CombinedSegLoss(nn.Module):
+    """CE + Dice combined loss: optimizes pixel accuracy while maximizing IoU directly."""
+    def __init__(self, ce_weight: float = 0.6, dice_weight: float = 0.4):
+        super().__init__()
+        self.ce_weight = ce_weight
+        self.dice_weight = dice_weight
+        self.ce = nn.CrossEntropyLoss()
+        self.dice = DiceLoss()
+
+    def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        return self.ce_weight * self.ce(logits, targets) + self.dice_weight * self.dice(logits, targets)
 
 
 class SegmentationMetricsCalculator:
@@ -20,14 +53,9 @@ class SegmentationMetricsCalculator:
         self.reset()
 
     def reset(self):
-        # Confusion matrix: rows = true, cols = pred
         self.confusion_matrix = np.zeros((self.num_classes, self.num_classes), dtype=np.int64)
 
     def update(self, preds: torch.Tensor, targets: torch.Tensor):
-        """
-        preds: (N, H, W) integer class predictions (0=bg, 1=tiger)
-        targets: (N, H, W) integer ground truth
-        """
         p = preds.cpu().numpy().flatten()
         t = targets.cpu().numpy().flatten()
         mask = (t >= 0) & (t < self.num_classes)
@@ -45,9 +73,9 @@ class SegmentationMetricsCalculator:
         denom = tp + fp + fn
         ious = np.divide(tp, denom, out=np.zeros_like(tp, dtype=float), where=denom != 0)
 
-        biou = float(ious[0]) # Background IoU
-        tiou = float(ious[1]) if len(ious) > 1 else 0.0 # Tiger IoU
-        miou = float(np.mean(ious)) # Mean IoU
+        biou = float(ious[0]) if len(ious) > 0 else 0.0
+        tiou = float(ious[1]) if len(ious) > 1 else 0.0
+        miou = float(np.mean(ious))
 
         return {
             "BIoU": biou,
@@ -58,13 +86,13 @@ class SegmentationMetricsCalculator:
 
 class SegmentationTrainer:
     """
-    Trains and evaluates semantic segmentation models on wild tiger images.
+    Trains and evaluates semantic segmentation models with combined CE+Dice loss.
     """
     def __init__(self, model: nn.Module, device: str = "cpu", lr: float = 0.005):
         self.model = model.to(device)
         self.device = device
-        self.criterion = nn.CrossEntropyLoss()
-        self.optimizer = torch.optim.SGD(self.model.parameters(), lr=lr, momentum=0.9, weight_decay=0.0005)
+        self.criterion = CombinedSegLoss(ce_weight=0.6, dice_weight=0.4)
+        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=1e-4)
         self.metrics = SegmentationMetricsCalculator(num_classes=2)
 
     def train_epoch(self, dataloader) -> float:

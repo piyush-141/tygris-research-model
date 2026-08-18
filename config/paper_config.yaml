@@ -114,3 +114,38 @@ fusion:
 ecology:
   home_range_method: "mcp_100" # [PAPER-SPECIFIED: 100% Minimum Convex Polygon]
   spatial_crs: "EPSG:4326"
+
+event_processing:
+  # [TWO-PASS PRODUCTION ENGINE EXTENSION]
+  mode: "production" # "production" (Two-Pass) or "research" (Full-sequence benchmark)
+  screening:
+    sampling_fps: 3.0 # Frame rate for cheap screening (2-5 FPS)
+    raw_video_fps: 30.0
+    animal_conf_threshold: 0.35
+    tiger_conf_threshold: 0.45
+    review_threshold: 0.30
+  tracking:
+    iou_threshold: 0.25
+    max_lost_frames: 5
+    min_track_frames: 1
+  frame_quality:
+    top_k_frames: 3 # Number of best diverse frames per tiger track
+    min_frame_distance: 2 # Minimum frame index gap to prevent near-duplicates
+    weights:
+      sharpness: 0.25
+      tiger_size: 0.20
+      stripe_contrast: 0.25
+      pose_confidence: 0.15
+      lighting: 0.15
+  pose:
+    enabled: true
+    keypoint_schema: "atrw_15"
+    posture_classes: ["standing", "walking", "lying", "crouched", "partially_visible"]
+  stripes:
+    enabled: true
+    signature_bins: 32
+  storage:
+    temp_dir: "outputs/temp_events"
+    output_dir: "outputs/final_sightings"
+    transactional_cleanup: true
+    retain_failed_events: true

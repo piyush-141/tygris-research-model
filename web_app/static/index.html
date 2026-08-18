@@ -3,45 +3,47 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tiger Re-Identification — Visual AI Pipeline</title>
+  <title>Tiger Vision AI — Video Event & Re-ID Intelligence</title>
   
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  
+  <!-- Leaflet GIS Map -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 
   <style>
     :root {
-      --bg-main: #080c15;
-      --bg-card: #0f172a;
-      --bg-card-hover: #141f36;
-      --bg-card-border: rgba(255, 255, 255, 0.08);
-      --bg-surface: #172238;
-      --bg-input: #0b1120;
+      --bg: #090d16;
+      --bg-card: #111726;
+      --bg-card-hover: #161e31;
+      --bg-inner: #0b101d;
+      --border: rgba(255, 255, 255, 0.08);
+      --border-accent: rgba(56, 189, 248, 0.35);
 
-      --accent-amber: #f59e0b;
-      --accent-amber-glow: rgba(245, 158, 11, 0.25);
-      --accent-cyan: #38bdf8;
-      --accent-cyan-glow: rgba(56, 189, 248, 0.25);
-      --accent-emerald: #10b981;
-      --accent-emerald-glow: rgba(16, 185, 129, 0.25);
-      --accent-rose: #f43f5e;
-      --accent-indigo: #6366f1;
+      --emerald: #10b981;
+      --emerald-glow: rgba(16, 185, 129, 0.2);
+      --amber: #f59e0b;
+      --amber-glow: rgba(245, 158, 11, 0.2);
+      --cyan: #06b6d4;
+      --cyan-glow: rgba(6, 182, 212, 0.25);
+      --rose: #f43f5e;
 
-      --text-primary: #f8fafc;
-      --text-secondary: #94a3b8;
-      --text-muted: #64748b;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
 
       --radius-sm: 8px;
       --radius-md: 14px;
       --radius-lg: 20px;
 
-      --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-      --font-display: 'Outfit', var(--font-sans);
+      --font: 'Inter', system-ui, -apple-system, sans-serif;
+      --font-title: 'Outfit', var(--font);
       --font-mono: 'JetBrains Mono', monospace;
 
-      --shadow-card: 0 10px 30px -10px rgba(0, 0, 0, 0.6);
-      --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      --shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
     }
 
     * {
@@ -51,965 +53,770 @@
     }
 
     body {
-      background-color: var(--bg-main);
+      background-color: var(--bg);
       background-image: 
-        radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.07) 0px, transparent 50%),
-        radial-gradient(at 100% 0%, rgba(245, 158, 11, 0.07) 0px, transparent 50%),
-        radial-gradient(at 50% 100%, rgba(16, 185, 129, 0.05) 0px, transparent 50%);
-      color: var(--text-primary);
-      font-family: var(--font-sans);
+        radial-gradient(at 15% 10%, rgba(6, 182, 212, 0.06) 0px, transparent 40%),
+        radial-gradient(at 85% 10%, rgba(245, 158, 11, 0.06) 0px, transparent 40%);
+      color: var(--text-main);
+      font-family: var(--font);
       min-height: 100vh;
-      padding: 1.25rem 2rem;
-      overflow-x: hidden;
+      padding: 2rem;
+      line-height: 1.5;
     }
 
-    .app-wrapper {
-      max-width: 1600px;
+    .container {
+      max-width: 1380px;
       margin: 0 auto;
     }
 
-    /* Top Navigation Header */
-    .top-header {
+    /* Header */
+    .header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 1.25rem;
-      padding-bottom: 1rem;
-      border-bottom: 1px solid var(--bg-card-border);
+      margin-bottom: 2rem;
+      padding-bottom: 1.25rem;
+      border-bottom: 1px solid var(--border);
     }
 
     .brand {
       display: flex;
       align-items: center;
-      gap: 1rem;
+      gap: 0.85rem;
     }
 
     .brand-icon {
-      font-size: 2.2rem;
+      font-size: 2rem;
       background: rgba(245, 158, 11, 0.12);
-      border: 1px solid rgba(245, 158, 11, 0.3);
-      padding: 0.35rem 0.65rem;
+      border: 1px solid rgba(245, 158, 11, 0.25);
+      padding: 0.4rem 0.6rem;
       border-radius: var(--radius-md);
-      box-shadow: 0 0 20px var(--accent-amber-glow);
+      box-shadow: 0 0 16px var(--amber-glow);
     }
 
     .brand-title {
-      font-family: var(--font-display);
-      font-size: 1.65rem;
+      font-family: var(--font-title);
+      font-size: 1.6rem;
       font-weight: 800;
       letter-spacing: -0.02em;
-      background: linear-gradient(135deg, #ffffff 40%, var(--accent-amber) 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
     }
 
-    .brand-subtitle {
-      color: var(--text-secondary);
-      font-size: 0.85rem;
+    .brand-sub {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      margin-top: 1px;
     }
 
-    .header-pills {
+    .header-status {
       display: flex;
+      align-items: center;
       gap: 0.5rem;
-      align-items: center;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      color: var(--emerald);
+      padding: 0.4rem 0.9rem;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 600;
     }
 
-    .pill {
-      font-size: 0.72rem;
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--emerald);
+      box-shadow: 0 0 8px var(--emerald);
+    }
+
+    /* Main Upload & Preset Hero Card */
+    .upload-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+      box-shadow: var(--shadow);
+    }
+
+    .preset-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 1.25rem;
+      flex-wrap: wrap;
+    }
+
+    .preset-title {
+      font-size: 0.78rem;
       font-weight: 700;
-      padding: 0.35rem 0.75rem;
-      border-radius: 9999px;
+      color: var(--text-dim);
       text-transform: uppercase;
-      letter-spacing: 0.04em;
-      display: inline-flex;
+      letter-spacing: 0.05em;
+      margin-right: 0.4rem;
+    }
+
+    .preset-btn {
+      background: var(--bg-inner);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 0.45rem 0.9rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
       align-items: center;
-      gap: 0.3rem;
+      gap: 0.4rem;
     }
 
-    .pill-green {
+    .preset-btn:hover {
+      background: var(--bg-card-hover);
+      color: var(--text-main);
+      border-color: rgba(255, 255, 255, 0.18);
+    }
+
+    .preset-btn.active {
+      background: rgba(6, 182, 212, 0.15);
+      border-color: var(--cyan);
+      color: var(--cyan);
+      box-shadow: 0 0 14px var(--cyan-glow);
+    }
+
+    /* Dropper Zone */
+    .drop-zone {
+      border: 2px dashed rgba(255, 255, 255, 0.12);
+      border-radius: var(--radius-md);
+      background: var(--bg-inner);
+      padding: 2rem 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: var(--cyan);
+      background: rgba(6, 182, 212, 0.06);
+      box-shadow: 0 0 20px var(--cyan-glow);
+    }
+
+    .drop-icon {
+      font-size: 2.2rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .drop-headline {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .drop-subtext {
+      font-size: 0.78rem;
+      color: var(--text-dim);
+      margin-top: 0.25rem;
+    }
+
+    .drop-thumbs-row {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-top: 1rem;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .drop-thumb {
+      width: 54px;
+      height: 54px;
+      border-radius: 8px;
+      object-fit: cover;
+      border: 2px solid var(--cyan);
+    }
+
+    .btn-clear {
+      background: rgba(244, 63, 94, 0.15);
+      color: var(--rose);
+      border: 1px solid rgba(244, 63, 94, 0.3);
+      padding: 0.35rem 0.75rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .action-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 1.25rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+    }
+
+    .camera-meta {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+
+    .station-select {
+      background: var(--bg-inner);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+      padding: 0.45rem 0.8rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.82rem;
+      outline: none;
+    }
+
+    .btn-analyze {
+      background: linear-gradient(135deg, var(--amber) 0%, #d97706 100%);
+      color: #000;
+      font-family: var(--font-title);
+      font-size: 0.95rem;
+      font-weight: 800;
+      border: none;
+      padding: 0.75rem 1.8rem;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 18px var(--amber-glow);
+    }
+
+    .btn-analyze:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 24px rgba(245, 158, 11, 0.4);
+    }
+
+    /* Notification Banner */
+    .banner {
+      padding: 0.85rem 1.25rem;
+      border-radius: var(--radius-md);
+      margin-bottom: 1.5rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      display: none;
+    }
+
+    /* Multi-Tiger Switcher Tabs */
+    .tiger-tabs-row {
+      display: flex;
+      gap: 0.6rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .tiger-tab-btn {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 0.6rem 1.2rem;
+      border-radius: var(--radius-md);
+      font-size: 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .tiger-tab-btn.active {
       background: rgba(16, 185, 129, 0.15);
-      color: var(--accent-emerald);
-      border: 1px solid rgba(16, 185, 129, 0.3);
+      border-color: var(--emerald);
+      color: var(--emerald);
+      box-shadow: 0 0 16px var(--emerald-glow);
     }
 
-    .pill-cyan {
-      background: rgba(56, 189, 248, 0.15);
-      color: var(--accent-cyan);
-      border: 1px solid rgba(56, 189, 248, 0.3);
+    /* Hero Identification Banner */
+    .result-hero {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(6, 182, 212, 0.06) 100%);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      border-radius: var(--radius-lg);
+      padding: 1.6rem 2rem;
+      margin-bottom: 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: var(--shadow);
     }
 
-    .pill-amber {
-      background: rgba(245, 158, 11, 0.15);
-      color: var(--accent-amber);
-      border: 1px solid rgba(245, 158, 11, 0.3);
+    .result-hero.unknown {
+      background: linear-gradient(135deg, rgba(244, 63, 94, 0.12) 0%, rgba(245, 158, 11, 0.06) 100%);
+      border-color: rgba(244, 63, 94, 0.35);
     }
 
-    /* Main App Layout: 2 Columns */
-    .main-layout {
+    .result-status-tag {
+      font-size: 0.75rem;
+      font-weight: 800;
+      color: var(--emerald);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 0.2rem;
+    }
+
+    .result-name {
+      font-family: var(--font-title);
+      font-size: 2rem;
+      font-weight: 900;
+      letter-spacing: -0.02em;
+    }
+
+    .result-meta {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: 0.3rem;
+    }
+
+    .result-score-badge {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 0.85rem 1.4rem;
+      text-align: center;
+    }
+
+    .result-score-val {
+      font-family: var(--font-title);
+      font-size: 1.6rem;
+      font-weight: 900;
+      color: var(--emerald);
+    }
+
+    .result-score-lbl {
+      font-size: 0.72rem;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+
+    /* 4-Step Visual Journey Grid */
+    .visual-grid {
       display: grid;
-      grid-template-columns: 360px 1fr;
+      grid-template-columns: repeat(4, 1fr);
       gap: 1.25rem;
-      align-items: start;
+      margin-bottom: 2rem;
     }
 
     @media (max-width: 1100px) {
-      .main-layout {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    /* Left Control Sidebar */
-    .control-sidebar {
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-    }
-
-    .panel-card {
-      background: var(--bg-card);
-      border: 1px solid var(--bg-card-border);
-      border-radius: var(--radius-lg);
-      padding: 1.25rem;
-      box-shadow: var(--shadow-card);
-    }
-
-    .panel-title {
-      font-family: var(--font-display);
-      font-size: 1.05rem;
-      font-weight: 700;
-      margin-bottom: 0.85rem;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    /* Upload & Dropzone Area */
-    .dropzone-area {
-      border: 2px dashed rgba(255, 255, 255, 0.15);
-      background: rgba(0, 0, 0, 0.25);
-      border-radius: var(--radius-md);
-      padding: 1.25rem 1rem;
-      text-align: center;
-      cursor: pointer;
-      transition: var(--transition);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      position: relative;
-    }
-
-    .dropzone-area:hover {
-      border-color: var(--accent-cyan);
-      background: rgba(56, 189, 248, 0.05);
-      box-shadow: 0 0 20px var(--accent-cyan-glow);
-    }
-
-    .dropzone-area input[type="file"] {
-      position: absolute;
-      top: 0; left: 0; width: 100%; height: 100%;
-      opacity: 0;
-      cursor: pointer;
-    }
-
-    .dropzone-icon {
-      font-size: 1.8rem;
-      margin-bottom: 0.3rem;
-    }
-
-    .dropzone-text {
-      font-size: 0.85rem;
-      font-weight: 700;
-      color: var(--accent-cyan);
-    }
-
-    .dropzone-hint {
-      font-size: 0.72rem;
-      color: var(--text-muted);
-      margin-top: 0.2rem;
-    }
-
-    /* Preloaded Sample Library (Clean Contained Grid) */
-    .sample-grid-container {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 0.5rem;
-      max-height: 230px;
-      overflow-y: auto;
-      padding-right: 0.25rem;
-    }
-
-    .sample-grid-item {
-      aspect-ratio: 1;
-      border-radius: var(--radius-sm);
-      overflow: hidden;
-      border: 2px solid transparent;
-      cursor: pointer;
-      background: #000;
-      transition: var(--transition);
-      position: relative;
-    }
-
-    .sample-grid-item img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-
-    .sample-grid-item:hover {
-      transform: scale(1.05);
-      border-color: var(--accent-amber);
-      z-index: 2;
-    }
-
-    .sample-grid-item.active {
-      border-color: var(--accent-cyan);
-      box-shadow: 0 0 14px var(--accent-cyan-glow);
-      z-index: 3;
-    }
-
-    /* Run Pipeline Button */
-    .btn-execute {
-      width: 100%;
-      background: linear-gradient(135deg, var(--accent-amber), #d97706);
-      color: #000;
-      font-family: var(--font-sans);
-      font-weight: 800;
-      font-size: 0.95rem;
-      padding: 0.85rem 1.5rem;
-      border-radius: var(--radius-md);
-      border: none;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.5rem;
-      transition: var(--transition);
-      box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4);
-    }
-
-    .btn-execute:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 25px rgba(245, 158, 11, 0.55);
-    }
-
-    .btn-execute:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-      transform: none;
-    }
-
-    /* Right Main Display Area */
-    .pipeline-main-area {
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-    }
-
-    /* Top Final Decision Banner */
-    .decision-banner {
-      background: var(--bg-card);
-      border: 1px solid var(--bg-card-border);
-      border-radius: var(--radius-lg);
-      padding: 1.25rem 1.6rem;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      transition: var(--transition);
-      box-shadow: var(--shadow-card);
-    }
-
-    .decision-banner.status-neutral {
-      border-left: 5px solid var(--text-muted);
-    }
-
-    .decision-banner.status-known {
-      border-left: 5px solid var(--accent-emerald);
-      background: linear-gradient(90deg, rgba(16, 185, 129, 0.12), var(--bg-card));
-      box-shadow: 0 0 30px var(--accent-emerald-glow);
-    }
-
-    .decision-banner.status-unknown {
-      border-left: 5px solid var(--accent-rose);
-      background: linear-gradient(90deg, rgba(244, 63, 94, 0.12), var(--bg-card));
-      box-shadow: 0 0 30px rgba(244, 63, 94, 0.2);
-    }
-
-    .decision-tag {
-      font-size: 0.72rem;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--accent-cyan);
-    }
-
-    .decision-headline {
-      font-family: var(--font-display);
-      font-size: 1.65rem;
-      font-weight: 800;
-      margin: 0.2rem 0;
-      color: #fff;
-    }
-
-    .decision-detail {
-      font-size: 0.85rem;
-      color: var(--text-secondary);
-    }
-
-    /* 4-Stage Visual Cards Grid */
-    .stages-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 1rem;
-    }
-
-    @media (max-width: 1300px) {
-      .stages-grid {
+      .visual-grid {
         grid-template-columns: repeat(2, 1fr);
       }
     }
 
-    @media (max-width: 700px) {
-      .stages-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    .stage-card {
+    .step-card {
       background: var(--bg-card);
-      border: 1px solid var(--bg-card-border);
-      border-radius: var(--radius-lg);
-      padding: 1.1rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
       display: flex;
       flex-direction: column;
-      box-shadow: var(--shadow-card);
-      transition: var(--transition);
-      min-width: 0;
+      box-shadow: var(--shadow);
     }
 
-    .stage-card:hover {
-      border-color: rgba(255, 255, 255, 0.2);
-      transform: translateY(-2px);
-    }
-
-    .stage-header {
+    .step-header {
+      padding: 0.75rem 1rem;
+      background: var(--bg-inner);
+      border-bottom: 1px solid var(--border);
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 0.75rem;
-    }
-
-    .stage-step-num {
-      font-size: 0.68rem;
-      font-weight: 800;
-      color: var(--accent-cyan);
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-    }
-
-    .stage-title {
-      font-family: var(--font-display);
-      font-size: 1rem;
+      font-size: 0.82rem;
       font-weight: 700;
-      margin-top: 0.1rem;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
     }
 
-    .stage-canvas-box {
-      width: 100%;
-      height: 200px;
-      background: #000;
-      border-radius: var(--radius-sm);
-      border: 1px solid var(--bg-card-border);
+    .step-badge {
+      font-size: 0.72rem;
+      font-weight: 800;
+      color: var(--cyan);
+      text-transform: uppercase;
+    }
+
+    .step-img-box {
+      height: 220px;
+      background: #020408;
       display: flex;
       align-items: center;
       justify-content: center;
-      overflow: hidden;
-      margin-bottom: 0.85rem;
       position: relative;
+      overflow: hidden;
     }
 
-    .stage-canvas-box img {
+    .step-img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    .step-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
       width: 100%;
       height: 100%;
-      object-fit: contain;
-      display: none;
+      pointer-events: none;
     }
 
-    .stage-placeholder {
-      font-size: 0.8rem;
-      color: var(--text-muted);
+    .step-placeholder {
+      color: var(--text-dim);
+      font-size: 0.82rem;
       text-align: center;
       padding: 1rem;
     }
 
-    .stage-text {
-      font-size: 0.78rem;
-      color: var(--text-secondary);
-      line-height: 1.45;
-      margin-bottom: 0.75rem;
-      flex: 1;
-    }
-
-    .stage-text strong {
-      color: var(--text-primary);
-    }
-
-    .stage-meta-row {
-      background: rgba(0, 0, 0, 0.35);
-      border: 1px solid rgba(255, 255, 255, 0.04);
-      border-radius: var(--radius-sm);
-      padding: 0.4rem 0.65rem;
-      font-size: 0.74rem;
-      color: var(--text-secondary);
-      display: flex;
-      justify-content: space-between;
-    }
-
-    .stage-meta-row strong {
-      color: var(--accent-cyan);
-    }
-
-    /* Stage 4 Custom Analysis Box */
-    .analysis-container {
-      height: 200px;
-      display: flex;
-      flex-direction: column;
-      gap: 0.45rem;
-      margin-bottom: 0.85rem;
-    }
-
-    .branch-card {
-      background: rgba(0, 0, 0, 0.35);
-      border: 1px solid var(--bg-card-border);
-      border-radius: var(--radius-sm);
-      padding: 0.55rem;
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-    }
-
-    .branch-label {
-      font-size: 0.68rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      color: var(--accent-cyan);
-    }
-
-    .branch-val {
-      font-size: 0.82rem;
-      font-weight: 700;
-      color: var(--text-primary);
-      margin: 0.15rem 0;
-    }
-
-    .meter-container {
-      width: 100%;
-      height: 5px;
-      background: rgba(255, 255, 255, 0.08);
-      border-radius: 9999px;
-      overflow: hidden;
-    }
-
-    .meter-bar {
-      height: 100%;
-      background: linear-gradient(90deg, var(--accent-cyan), var(--accent-emerald));
-      transition: width 0.4s ease;
-    }
-
-    .sparkline-box {
-      display: flex;
-      gap: 2px;
-      height: 18px;
-      align-items: flex-end;
-      margin: 0.2rem 0;
-    }
-
-    .sparkline-bar {
-      flex: 1;
-      background: var(--accent-indigo);
-      border-radius: 1px;
-    }
-
-    /* Database Matches Box */
-    .knn-matches-card {
+    .step-footer {
+      padding: 0.75rem 1rem;
       background: var(--bg-card);
-      border: 1px solid var(--bg-card-border);
-      border-radius: var(--radius-lg);
-      padding: 1.1rem 1.4rem;
-      box-shadow: var(--shadow-card);
-    }
-
-    .knn-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 0.85rem;
-      margin-top: 0.6rem;
-    }
-
-    @media (max-width: 800px) {
-      .knn-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    .knn-item {
-      background: rgba(0, 0, 0, 0.35);
-      border: 1px solid var(--bg-card-border);
-      border-radius: var(--radius-sm);
-      padding: 0.65rem 0.9rem;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .knn-rank {
-      font-weight: 800;
-      color: var(--accent-cyan);
-      margin-right: 0.4rem;
-    }
-
-    .knn-id {
-      font-weight: 700;
-      color: var(--text-primary);
-    }
-
-    .knn-dist {
-      font-family: var(--font-mono);
+      border-top: 1px solid var(--border);
       font-size: 0.78rem;
-      color: var(--accent-amber);
+      color: var(--text-muted);
+    }
+
+    /* Tabbed Details Console */
+    .details-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem;
+      box-shadow: var(--shadow);
+    }
+
+    .nav-tabs {
+      display: flex;
+      gap: 1.5rem;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 1.25rem;
+      padding-bottom: 0.5rem;
+    }
+
+    .nav-tab-link {
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      font-size: 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+      padding: 0.4rem 0.2rem;
+      position: relative;
+      transition: all 0.2s ease;
+    }
+
+    .nav-tab-link.active {
+      color: var(--text-main);
+    }
+
+    .nav-tab-link.active::after {
+      content: '';
+      position: absolute;
+      bottom: -0.55rem;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--cyan);
+      box-shadow: 0 0 8px var(--cyan);
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* Clean Match Gallery Table */
+    .matches-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+
+    .matches-table th {
+      text-align: left;
+      padding: 0.65rem 1rem;
+      color: var(--text-dim);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .matches-table td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .matches-table tr:hover td {
+      background: var(--bg-inner);
+    }
+
+    .winner-row td {
+      background: rgba(16, 185, 129, 0.05);
+      font-weight: 700;
+      color: var(--emerald);
+    }
+
+    /* GIS Map & Telemetry */
+    .map-box {
+      height: 280px;
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+
+    .telemetry-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .tel-metric {
+      background: var(--bg-inner);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 0.85rem 1rem;
+    }
+
+    .tel-metric-lbl {
+      font-size: 0.72rem;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+
+    .tel-metric-val {
+      font-family: var(--font-title);
+      font-size: 1.2rem;
+      font-weight: 800;
+      color: var(--text-main);
+      margin-top: 0.2rem;
     }
   </style>
 </head>
 <body>
-  <div class="app-wrapper">
+  <div class="container">
     
     <!-- Top Header -->
-    <header class="top-header">
+    <header class="header">
       <div class="brand">
         <div class="brand-icon">🐅</div>
         <div>
-          <h1 class="brand-title">Tiger Re-Identification — Visual Pipeline</h1>
-          <p class="brand-subtitle">Ma et al. (2025) · Ecological Indicators · DDRNet-39 + ConvNeXt-small Dual Branch</p>
+          <h1 class="brand-title">Tiger Vision AI</h1>
+          <div class="brand-sub">Real-Time Camera-Trap Video Screening, Pose & Stripe Identification</div>
         </div>
       </div>
-      <div class="header-pills">
-        <span class="pill pill-green">⚡ RTX 4060 GPU</span>
-        <span class="pill pill-cyan">DDRNet-39</span>
-        <span class="pill pill-amber">64-D Metric Learning</span>
+
+      <div class="header-status">
+        <div class="dot"></div>
+        <span>AI Engine Ready</span>
       </div>
     </header>
 
-    <!-- Main Layout: 2 Columns -->
-    <div class="main-layout">
-      
-      <!-- Left Controls Sidebar -->
-      <aside class="control-sidebar">
-        
-        <!-- Upload Box -->
-        <div class="panel-card">
-          <h2 class="panel-title">Upload Camera-Trap Photo</h2>
-          <label class="dropzone-area" id="dropzone">
-            <input type="file" id="file-input" accept="image/*">
-            <div class="dropzone-icon">📁</div>
-            <span class="dropzone-text">Click or Drag Photo Here</span>
-            <span class="dropzone-hint">Supports JPG, PNG</span>
-          </label>
-        </div>
-
-        <!-- Sample Carousel Grid -->
-        <div class="panel-card">
-          <h2 class="panel-title">
-            <span>Preloaded Samples</span>
-            <span style="font-size: 0.72rem; color: var(--text-muted);">18 Images</span>
-          </h2>
-          <div class="sample-grid-container" id="sample-grid">
-            <!-- Dynamically populated 4x4 grid -->
-          </div>
-        </div>
-
-        <!-- Action Button -->
-        <button id="run-btn" class="btn-execute">
-          <span>⚡ Run AI Pipeline</span>
+    <!-- Upload & Presets Section -->
+    <section class="upload-card">
+      <div class="preset-bar">
+        <span class="preset-title">Test Scenarios:</span>
+        <button class="preset-btn active" onclick="loadPreset('multi_tiger')">
+          <span>🐅</span> Multi-Tiger Encounter (2 Tracks)
         </button>
+        <button class="preset-btn" onclick="loadPreset('single_tiger')">
+          <span>🐯</span> Single Tiger Crossing
+        </button>
+        <button class="preset-btn" onclick="loadPreset('non_tiger')">
+          <span>🦌</span> Non-Target Wildlife (Deer)
+        </button>
+        <button class="preset-btn" onclick="loadPreset('empty')">
+          <span>🍃</span> False Trigger (Wind/Leaves)
+        </button>
+      </div>
 
-      </aside>
-
-      <!-- Right Main Pipeline Area -->
-      <main class="pipeline-main-area">
+      <!-- File Dropper Zone -->
+      <div id="drop-zone" class="drop-zone" onclick="triggerFileInput()">
+        <input type="file" id="file-input" accept="image/*,video/*" multiple style="display: none;" onchange="handleFileSelect(event)" />
+        <div class="drop-icon">📥</div>
+        <div class="drop-headline">Drop your Camera-Trap Video (.mp4, .avi) or Images here</div>
+        <div class="drop-subtext">Click to browse · Supports full videos, frame bursts, or individual tiger snapshots</div>
         
-        <!-- Top Decision Banner -->
-        <section id="decision-banner" class="decision-banner status-neutral">
-          <div>
-            <span class="decision-tag" id="decision-tag">READY TO ANALYZE</span>
-            <h2 class="decision-headline" id="decision-headline">Select a photo on the left & click "Run AI Pipeline"</h2>
-            <p class="decision-detail" id="decision-detail">The 4 stages below demonstrate the exact image transformations and mathematical calculations.</p>
-          </div>
-        </section>
+        <div id="drop-thumbs-row" class="drop-thumbs-row" style="display: none;">
+          <div id="drop-thumbs-container" style="display: flex; gap: 8px;"></div>
+          <button class="btn-clear" onclick="clearUpload(event)">✕ Clear Files</button>
+        </div>
+      </div>
 
-        <!-- 4-Stage Visual Cards Grid -->
-        <div class="stages-grid">
-          
-          <!-- STAGE 1: RAW INPUT -->
-          <div class="stage-card">
-            <div class="stage-header">
-              <span class="stage-step-num">STAGE 1</span>
-              <h3 class="stage-title">Raw Camera Photo</h3>
-            </div>
-            <div class="stage-canvas-box">
-              <img id="img-stage-1" src="" alt="Stage 1">
-              <div id="placeholder-stage-1" class="stage-placeholder">Select or upload a photo</div>
-            </div>
-            <p class="stage-text">
-              <strong>What happens here?</strong> The camera trap in the jungle captures a raw photo containing heavy foliage, unpredictable lighting, and shadows.
-            </p>
-            <div class="stage-meta-row">
-              <span>Source:</span> <strong id="meta-source">Camera Trap</strong>
-            </div>
-          </div>
-
-          <!-- STAGE 2: DDRNet-39 SEGMENTATION -->
-          <div class="stage-card">
-            <div class="stage-header">
-              <span class="stage-step-num">STAGE 2</span>
-              <h3 class="stage-title">DDRNet-39 Mask</h3>
-            </div>
-            <div class="stage-canvas-box">
-              <img id="img-stage-2" src="" alt="Stage 2">
-              <div id="placeholder-stage-2" class="stage-placeholder">Awaiting pipeline run</div>
-            </div>
-            <p class="stage-text">
-              <strong>What happens here?</strong> <em>DDRNet-39</em> predicts pixel categories: <strong>Green = Tiger</strong>, <strong>Black = Background</strong>.
-            </p>
-            <div class="stage-meta-row">
-              <span>QA Status:</span> <strong id="meta-qa">Awaiting</strong>
-            </div>
-          </div>
-
-          <!-- STAGE 3: ISOLATED CROP -->
-          <div class="stage-card">
-            <div class="stage-header">
-              <span class="stage-step-num">STAGE 3</span>
-              <h3 class="stage-title">Isolated Cutout</h3>
-            </div>
-            <div class="stage-canvas-box">
-              <img id="img-stage-3" src="" alt="Stage 3">
-              <div id="placeholder-stage-3" class="stage-placeholder">Awaiting pipeline run</div>
-            </div>
-            <p class="stage-text">
-              <strong>What happens here?</strong> Jungle background is stripped away and the tiger is tightly cropped so trees do not confuse the Re-ID network.
-            </p>
-            <div class="stage-meta-row">
-              <span>Bounding Box:</span> <strong id="meta-bbox">Pending</strong>
-            </div>
-          </div>
-
-          <!-- STAGE 4: DUAL-BRANCH CONVNEXT -->
-          <div class="stage-card">
-            <div class="stage-header">
-              <span class="stage-step-num">STAGE 4</span>
-              <h3 class="stage-title">Dual-Branch AI</h3>
-            </div>
-            <div class="analysis-container">
-              <div class="branch-card">
-                <span class="branch-label">Branch A: Direct Classifier</span>
-                <div class="branch-val" id="branch-a-pred">Top Guess: --</div>
-                <div class="meter-container">
-                  <div id="branch-a-fill" class="meter-bar" style="width: 0%;"></div>
-                </div>
-              </div>
-              <div class="branch-card">
-                <span class="branch-label">Branch B: 64-D Stripe Fingerprint</span>
-                <div class="sparkline-box" id="sparkline-box"></div>
-                <div style="font-size: 0.68rem; color: var(--text-muted);" id="branch-b-dist">Nearest Database Match: --</div>
-              </div>
-            </div>
-            <p class="stage-text">
-              <strong>What happens here?</strong> <em>ConvNeXt-small</em> computes a 64-D stripe vector and compares it against enrolled tigers via Euclidean distance.
-            </p>
-            <div class="stage-meta-row">
-              <span>Embedding:</span> <strong>64-D Unit Norm</strong>
-            </div>
-          </div>
-
+      <!-- Action Row -->
+      <div class="action-row">
+        <div class="camera-meta">
+          <span>Station:</span>
+          <select id="camera-select" class="station-select">
+            <option value="PTR-CORE-EP-01">East Pench Station 01 (Core Zone)</option>
+            <option value="PTR-CORE-CP-01">Center Pench Station 01 (Core Zone)</option>
+            <option value="PTR-CORE-WP-01">West Pench Station 01 (Core Zone)</option>
+            <option value="PTR-BUFF-01">Buffer Zone North Station 01</option>
+          </select>
         </div>
 
-        <!-- Bottom Database Matches -->
-        <section class="knn-matches-card">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <h3 style="font-family: var(--font-display); font-size: 0.95rem; font-weight: 700;">
-              Top 3 Database Matches & Metric Distances (k=7 Nearest Neighbors)
-            </h3>
-            <span style="font-size: 0.72rem; color: var(--text-secondary);">Fusion Formula: Vote = Rep(1.0) + Σ 1/(0.1 + d)</span>
-          </div>
-          <div class="knn-grid" id="knn-grid">
-            <div class="knn-item" style="grid-column: span 3; justify-content: center; color: var(--text-muted); font-size: 0.8rem;">
-              Select a photo and click "Run AI Pipeline" to view nearest matches
-            </div>
-          </div>
-        </section>
+        <button id="btn-analyze" class="btn-analyze" onclick="runAnalysis()">
+          ⚡ Run Video Analysis
+        </button>
+      </div>
+    </section>
 
-      </main>
+    <!-- Notification Banner -->
+    <div id="status-banner" class="banner"></div>
+
+    <!-- Active Tigers Tabs (Visible when multi-tiger detected) -->
+    <div id="tiger-tabs-container" class="tiger-tabs-row" style="display: none;"></div>
+
+    <!-- Hero Identification Result -->
+    <div id="result-hero" class="result-hero" style="display: none;">
+      <div>
+        <div id="result-status-tag" class="result-status-tag">✓ KNOWN INDIVIDUAL CONFIRMED</div>
+        <div id="result-name" class="result-name">Identified as Tiger #237</div>
+        <div id="result-meta" class="result-meta">
+          Track 1 · Selected Best Frame (Quality: 98.4/100) · 3 Consensus Matches · Logged to Pench Database
+        </div>
+      </div>
+
+      <div class="result-score-badge">
+        <div id="result-score-val" class="result-score-val">96.4%</div>
+        <div class="result-score-lbl">Identification Confidence</div>
+      </div>
+    </div>
+
+    <!-- 4-Step Visual Journey -->
+    <div id="visual-grid" class="visual-grid" style="display: none;">
+      
+      <!-- Step 1: Best Frame Selected -->
+      <div class="step-card">
+        <div class="step-header">
+          <span>1. Best Quality Frame</span>
+          <span id="badge-step-1" class="step-badge">TOP 1 / 4 FRAMES</span>
+        </div>
+        <div class="step-img-box">
+          <div id="ph-step-1" class="step-placeholder">Input Frame</div>
+          <img id="img-step-1" class="step-img" style="display: none;" alt="Best Quality Frame" />
+        </div>
+        <div id="lbl-step-1" class="step-footer">
+          Laplacian Sharpness: 98.4 · Zero Motion Blur
+        </div>
+      </div>
+
+      <!-- Step 2: Pose & Posture -->
+      <div class="step-card">
+        <div class="step-header">
+          <span>2. Pose & Anatomy</span>
+          <span id="badge-step-2" class="step-badge">WALKING</span>
+        </div>
+        <div class="step-img-box">
+          <div id="ph-step-2" class="step-placeholder">Pose Landmarks</div>
+          <img id="img-step-2" class="step-img" style="display: none;" alt="Pose Estimation" />
+          <canvas id="pose-canvas" class="step-canvas"></canvas>
+        </div>
+        <div id="lbl-step-2" class="step-footer">
+          15 Anatomical Keypoints · Conf: 94.2%
+        </div>
+      </div>
+
+      <!-- Step 3: Background Removal -->
+      <div class="step-card">
+        <div class="step-header">
+          <span>3. AI Background Removal</span>
+          <span id="badge-step-3" class="step-badge">DDRNET-39</span>
+        </div>
+        <div class="step-img-box">
+          <div id="ph-step-3" class="step-placeholder">Silhouette Mask</div>
+          <img id="img-step-3" class="step-img" style="display: none;" alt="DDRNet-39 Cutout" />
+        </div>
+        <div id="lbl-step-3" class="step-footer">
+          Clean Tiger Silhouette · Zero Habitat Clutter
+        </div>
+      </div>
+
+      <!-- Step 4: Exact Stripe Ridge Matching -->
+      <div class="step-card">
+        <div class="step-header">
+          <span>4. Exact Flank Stripes</span>
+          <span id="badge-step-4" class="step-badge">94.8% MATCH</span>
+        </div>
+        <div class="step-img-box">
+          <div id="ph-step-4" class="step-placeholder">Stripe Ridges</div>
+          <img id="img-step-4" class="step-img" style="display: none;" alt="Exact Flank Stripes" />
+        </div>
+        <div id="lbl-step-4" class="step-footer">
+          Extracted 12 Major Ridge Features · Left Flank
+        </div>
+      </div>
 
     </div>
 
+    <!-- Collapsible / Clean Details Console -->
+    <section id="details-card" class="details-card" style="display: none;">
+      <div class="nav-tabs">
+        <button class="nav-tab-link active" onclick="switchTab('tab-matches')">🏆 Top Gallery Matches</button>
+        <button class="nav-tab-link" onclick="switchTab('tab-map')">🗺️ Sighting Map & Range</button>
+        <button class="nav-tab-link" onclick="switchTab('tab-storage')">⚡ Storage & Efficiency</button>
+      </div>
+
+      <!-- Tab 1: Top Gallery Matches -->
+      <div id="tab-matches" class="tab-content active">
+        <table class="matches-table">
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Tiger Identity</th>
+              <th>Matched Profile</th>
+              <th>Feature Distance</th>
+              <th>Vote Contribution</th>
+            </tr>
+          </thead>
+          <tbody id="matches-table-body">
+            <!-- Dynamically Populated -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Tab 2: Sighting Map -->
+      <div id="tab-map" class="tab-content">
+        <div id="gis-map" class="map-box"></div>
+        <div style="font-size: 0.78rem; color: var(--text-dim); margin-top: 0.6rem;">
+          Recorded Occurrence location mapped to Pench National Park & Tiger Reserve GIS database.
+        </div>
+      </div>
+
+      <!-- Tab 3: Storage Savings -->
+      <div id="tab-storage" class="tab-content">
+        <div style="font-size: 0.9rem; font-weight: 700; color: var(--emerald); margin-bottom: 0.5rem;" id="storage-saved-headline">
+          ⚡ 98.8% Storage Saved vs Full Video Recording
+        </div>
+        <div class="telemetry-row">
+          <div class="tel-metric">
+            <div class="tel-metric-lbl">Raw Video Frames</div>
+            <div id="tel-raw" class="tel-metric-val">160 frames</div>
+          </div>
+          <div class="tel-metric">
+            <div class="tel-metric-lbl">Screened Frames</div>
+            <div id="tel-screened" class="tel-metric-val">16 frames</div>
+          </div>
+          <div class="tel-metric">
+            <div class="tel-metric-lbl">Retained Canonical Crop</div>
+            <div id="tel-retained" class="tel-metric-val">2 images</div>
+          </div>
+          <div class="tel-metric">
+            <div class="tel-metric-lbl">Processing Latency</div>
+            <div id="tel-time" class="tel-metric-val">42.5 ms</div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
   </div>
 
-  <!-- Integrated JavaScript Client -->
-  <script>
-    let activeImage = {
-      path: null,
-      base64: null,
-      result: null
-    };
-
-    document.addEventListener("DOMContentLoaded", () => {
-      loadSampleGrid();
-      setupUploadHandlers();
-      setupRunButton();
-    });
-
-    /* Load Preloaded Sample Grid */
-    async function loadSampleGrid() {
-      const container = document.getElementById("sample-grid");
-      try {
-        const res = await fetch("/api/sample_images");
-        const data = await res.json();
-        container.innerHTML = "";
-
-        if (!data.samples || data.samples.length === 0) {
-          container.innerHTML = `<div style="grid-column: span 4; font-size: 0.75rem; color: var(--text-muted); text-align: center; padding: 1rem;">No samples found.</div>`;
-          return;
-        }
-
-        data.samples.forEach((s, idx) => {
-          const item = document.createElement("div");
-          item.className = `sample-grid-item ${idx === 0 ? "active" : ""}`;
-          item.title = `Click to select: ${s.filename}`;
-          item.innerHTML = `<img src="/api/image_raw?path=${encodeURIComponent(s.path)}" alt="${s.filename}">`;
-
-          item.addEventListener("click", () => {
-            document.querySelectorAll(".sample-grid-item").forEach(el => el.classList.remove("active"));
-            item.classList.add("active");
-            setImageSelection(s.path, null);
-          });
-
-          container.appendChild(item);
-        });
-
-        if (data.samples.length > 0) {
-          setImageSelection(data.samples[0].path, null);
-        }
-      } catch (err) {
-        console.error("Failed to load sample grid", err);
-        container.innerHTML = `<div style="grid-column: span 4; font-size: 0.75rem; color: var(--text-muted); text-align: center; padding: 1rem;">Failed to load samples</div>`;
-      }
-    }
-
-    /* File Upload Handlers */
-    function setupUploadHandlers() {
-      const input = document.getElementById("file-input");
-      const dropzone = document.getElementById("dropzone");
-
-      input.addEventListener("change", (e) => {
-        if (e.target.files && e.target.files[0]) {
-          processFile(e.target.files[0]);
-        }
-      });
-
-      dropzone.addEventListener("dragover", (e) => {
-        e.preventDefault();
-        dropzone.style.borderColor = "var(--accent-cyan)";
-      });
-      dropzone.addEventListener("dragleave", () => {
-        dropzone.style.borderColor = "";
-      });
-      dropzone.addEventListener("drop", (e) => {
-        e.preventDefault();
-        dropzone.style.borderColor = "";
-        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-          processFile(e.dataTransfer.files[0]);
-        }
-      });
-    }
-
-    function processFile(file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        document.querySelectorAll(".sample-grid-item").forEach(el => el.classList.remove("active"));
-        setImageSelection(null, e.target.result);
-      };
-      reader.readAsDataURL(file);
-    }
-
-    function setImageSelection(path, b64) {
-      activeImage.path = path;
-      activeImage.base64 = b64;
-      activeImage.result = null;
-
-      // Update Stage 1 Preview
-      const img1 = document.getElementById("img-stage-1");
-      const p1 = document.getElementById("placeholder-stage-1");
-      img1.src = b64 || `/api/image_raw?path=${encodeURIComponent(path)}`;
-      img1.style.display = "block";
-      p1.style.display = "none";
-      document.getElementById("meta-source").textContent = path ? "Dataset Image" : "Uploaded Photo";
-
-      resetStageOutputs();
-    }
-
-    function resetStageOutputs() {
-      ["img-stage-2", "img-stage-3"].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.style.display = "none";
-      });
-      ["placeholder-stage-2", "placeholder-stage-3"].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.style.display = "block";
-      });
-
-      document.getElementById("meta-qa").textContent = "Awaiting";
-      document.getElementById("meta-bbox").textContent = "Pending";
-
-      document.getElementById("branch-a-pred").textContent = "Top Guess: --";
-      document.getElementById("branch-a-fill").style.width = "0%";
-      document.getElementById("sparkline-box").innerHTML = "";
-      document.getElementById("branch-b-dist").textContent = "Nearest Database Match: --";
-
-      const banner = document.getElementById("decision-banner");
-      banner.className = "decision-banner status-neutral";
-      document.getElementById("decision-tag").textContent = "READY TO ANALYZE";
-      document.getElementById("decision-headline").textContent = "Select a photo on the left & click 'Run AI Pipeline'";
-      document.getElementById("decision-detail").textContent = "The 4 stages below demonstrate the exact image transformations and mathematical calculations.";
-
-      document.getElementById("knn-grid").innerHTML = `
-        <div class="knn-item" style="grid-column: span 3; justify-content: center; color: var(--text-muted); font-size: 0.8rem;">
-          Select a photo and click "Run AI Pipeline" to view nearest matches
-        </div>
-      `;
-    }
-
-    /* Run AI Pipeline Button */
-    function setupRunButton() {
-      const btn = document.getElementById("run-btn");
-      btn.addEventListener("click", async () => {
-        if (!activeImage.path && !activeImage.base64) {
-          alert("Please select or upload a tiger photo first!");
-          return;
-        }
-
-        btn.disabled = true;
-        btn.innerHTML = `<span>⏳ Processing Stage 1 → 4...</span>`;
-
-        try {
-          const payload = {
-            image_path: activeImage.path,
-            image_base64: activeImage.base64,
-            camera_id: "PTR-CORE-EP-01",
-            timestamp: new Date().toISOString().slice(0, 19)
-          };
-
-          const res = await fetch("/api/inference", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-          });
-          const data = await res.json();
-          activeImage.result = data;
-
-          renderPipelineOutputs(data);
-        } catch (err) {
-          alert("Inference execution failed: " + err.message);
-        } finally {
-          btn.disabled = false;
-          btn.innerHTML = `<span>⚡ Run AI Pipeline</span>`;
-        }
-      });
-    }
-
-    /* Render Pipeline Outputs */
-    function renderPipelineOutputs(data) {
-      // Stage 2: Segmentation Mask
-      const img2 = document.getElementById("img-stage-2");
-      const p2 = document.getElementById("placeholder-stage-2");
-      img2.src = data.mask_b64;
-      img2.style.display = "block";
-      p2.style.display = "none";
-      document.getElementById("meta-qa").textContent = data.qa_status;
-      document.getElementById("meta-qa").style.color = (data.qa_status === "PASSED") ? "var(--accent-emerald)" : "var(--accent-amber)";
-
-      // Stage 3: Isolated Cutout
-      const img3 = document.getElementById("img-stage-3");
-      const p3 = document.getElementById("placeholder-stage-3");
-      img3.src = data.segmented_crop_b64;
-      img3.style.display = "block";
-      p3.style.display = "none";
-      if (data.bbox) {
-        document.getElementById("meta-bbox").textContent = `[${data.bbox.join(", ")}]`;
-      }
-
-      // Stage 4: Dual Branch
-      document.getElementById("branch-a-pred").textContent = `Top Guess: ${data.classifier_prediction}`;
-      const confPct = (data.classifier_confidence * 100).toFixed(1);
-      document.getElementById("branch-a-fill").style.width = `${Math.min(100, confPct)}%`;
-
-      const sparkline = document.getElementById("sparkline-box");
-      sparkline.innerHTML = "";
-      if (data.embedding_preview) {
-        data.embedding_preview.forEach(val => {
-          const h = Math.max(2, Math.min(18, Math.abs(val) * 45));
-          const bar = document.createElement("div");
-          bar.className = "sparkline-bar";
-          bar.style.height = `${h}px`;
-          bar.title = `Dim value: ${val.toFixed(4)}`;
-          sparkline.appendChild(bar);
-        });
-      }
-
-      const topNeighbor = (data.nearest_neighbors && data.nearest_neighbors.length > 0) ? data.nearest_neighbors[0] : null;
-      if (topNeighbor) {
-        document.getElementById("branch-b-dist").textContent = `Nearest: Tiger ${topNeighbor.tiger_id} (${topNeighbor.side}) · d = ${topNeighbor.distance.toFixed(4)}`;
-      }
-
-      // Decision Banner
-      const banner = document.getElementById("decision-banner");
-      const tag = document.getElementById("decision-tag");
-      const headline = document.getElementById("decision-headline");
-      const detail = document.getElementById("decision-detail");
-
-      if (data.recognized && data.status === "KNOWN") {
-        banner.className = "decision-banner status-known";
-        tag.textContent = "KNOWN TIGER CONFIRMED";
-        headline.textContent = `Identified as Tiger #${data.tiger_id}`;
-        detail.textContent = `Weighted Late Fusion Confidence: ${(data.confidence * 100).toFixed(1)}% · Distance to database match: ${data.nearest_distance} (Threshold ≤ 0.40).`;
-      } else {
-        banner.className = "decision-banner status-unknown";
-        tag.textContent = "UNKNOWN TIGER DETECTED";
-        headline.textContent = "New Individual Detected in Camera Trap";
-        detail.textContent = `Both branches rejected match (Classification probability ${confPct}% < 95% or Nearest distance ${data.nearest_distance} > 0.40).`;
-      }
-
-      // Database Matches Grid
-      const knnGrid = document.getElementById("knn-grid");
-      knnGrid.innerHTML = "";
-      if (data.nearest_neighbors && data.nearest_neighbors.length > 0) {
-        data.nearest_neighbors.slice(0, 3).forEach((m, idx) => {
-          const item = document.createElement("div");
-          item.className = "knn-item";
-          item.innerHTML = `
-            <div>
-              <span class="knn-rank">#${idx+1}</span>
-              <span class="knn-id">Tiger ${m.tiger_id} (${m.side})</span>
-            </div>
-            <span class="knn-dist">d = ${m.distance.toFixed(4)}</span>
-          `;
-          knnGrid.appendChild(item);
-        });
-      }
-    }
-  </script>
+  <script src="/static/app.js"></script>
 </body>
 </html>

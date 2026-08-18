@@ -1,14 +1,35 @@
 """
-Representation Learning Trainer & Metric Evaluation
-Faithfully calculates Top-1 Accuracy, Top-3 Accuracy, Micro-F1, and mAP.
+Representation Learning Trainer & Metric Evaluation — Accuracy-Maximised
+Implements:
+- Label-Smoothing Cross-Entropy / ArcFace training
+- Top-1 Accuracy, Top-3 Accuracy, Micro-F1, and mAP evaluation
 Reference: Ma et al. (2025) Section 12 & 22.
 """
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from typing import Dict, Any, List, Tuple
 import numpy as np
 from sklearn.metrics import f1_score, average_precision_score
+
+
+class LabelSmoothingCrossEntropy(nn.Module):
+    """Cross-entropy with label smoothing for regularizing Re-ID classifiers."""
+    def __init__(self, smoothing: float = 0.1):
+        super().__init__()
+        self.smoothing = smoothing
+
+    def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        log_probs = F.log_softmax(logits, dim=-1)
+        num_classes = logits.size(-1)
+        
+        with torch.no_grad():
+            true_dist = torch.zeros_like(log_probs)
+            true_dist.fill_(self.smoothing / (num_classes - 1))
+            true_dist.scatter_(1, targets.data.unsqueeze(1), 1.0 - self.smoothing)
+
+        return torch.mean(torch.sum(-true_dist * log_probs, dim=-1))
 
 
 class RepresentationMetricsCalculator:
@@ -58,7 +79,6 @@ class RepresentationMetricsCalculator:
 
         # mAP (mean Average Precision)
         try:
-            # One-hot encode targets
             y_onehot = np.zeros((len(y_true), self.num_classes))
             for i, target in enumerate(y_true):
                 if target < self.num_classes:
@@ -77,7 +97,7 @@ class RepresentationMetricsCalculator:
 
 class RepresentationTrainer:
     """
-    Trains and evaluates the tiger representation learning branch.
+    Trains and evaluates the tiger representation learning branch with ArcFace & Label Smoothing.
     """
     def __init__(
         self,
@@ -85,12 +105,13 @@ class RepresentationTrainer:
         num_classes: int,
         device: str = "cpu",
         lr: float = 0.0001,
-        weight_decay: float = 0.01
+        weight_decay: float = 1e-4,
+        label_smoothing: float = 0.1
     ):
         self.model = model.to(device)
         self.num_classes = num_classes
         self.device = device
-        self.criterion = nn.CrossEntropyLoss()
+        self.criterion = LabelSmoothingCrossEntropy(smoothing=label_smoothing) if label_smoothing > 0 else nn.CrossEntropyLoss()
         self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=weight_decay)
         self.metrics = RepresentationMetricsCalculator(num_classes=num_classes)
 
@@ -102,7 +123,12 @@ class RepresentationTrainer:
             labels = labels.to(self.device)
 
             self.optimizer.zero_grad()
-            logits = self.model(images)
+            # Pass labels for ArcFace margin calculation during training
+            try:
+                logits = self.model(images, labels=labels)
+            except TypeError:
+                logits = self.model(images)
+
             loss = self.criterion(logits, labels)
             loss.backward()
             self.optimizer.step()
