@@ -72,6 +72,25 @@ CONFIG_PATH = os.path.join(BASE_DIR, "config", "paper_config.yaml")
 DB_PATH = os.path.join(BASE_DIR, "outputs", "pench_sightings.db")
 CLASS_MAPPING_PATH = os.path.join(BASE_DIR, "outputs", "class_mapping.json")
 
+def resolve_dataset_dir(*subpaths) -> str:
+    """Finds directory inside dataset/ or at project root."""
+    p1 = os.path.join(BASE_DIR, "dataset", *subpaths)
+    if os.path.exists(p1):
+        return p1
+    return os.path.join(BASE_DIR, *subpaths)
+
+def resolve_dataset_rel_path(rel_path: str) -> str:
+    """Finds relative path inside dataset/ or at project root."""
+    if not rel_path:
+        return ""
+    if os.path.exists(os.path.join(BASE_DIR, rel_path)):
+        return rel_path
+    if not rel_path.startswith("dataset"):
+        p_data = os.path.join("dataset", rel_path)
+        if os.path.exists(os.path.join(BASE_DIR, p_data)):
+            return p_data
+    return rel_path
+
 print("[Server] Initializing Tiger Re-ID Models & Pipelines...")
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -141,7 +160,7 @@ event_processor = EventProcessor(
     mode="production"
 )
 
-reid_train_dir = os.path.join(BASE_DIR, "atrw_reid_train", "train")
+reid_train_dir = resolve_dataset_dir("atrw_reid_train", "train")
 
 # Default Pench Camera Trap Stations
 PENCH_CAMERAS = [
@@ -246,9 +265,10 @@ class TigerReIDRequestHandler(SimpleHTTPRequestHandler):
         elif path == "/api/sample_events":
             # Provide rich presets for testing all deployment scenarios
             reid_files = []
-            fdir = os.path.join(BASE_DIR, "atrw_reid_train", "train")
+            fdir = resolve_dataset_dir("atrw_reid_train", "train")
             if os.path.exists(fdir):
-                reid_files = sorted([os.path.join("atrw_reid_train", "train", f) for f in os.listdir(fdir) if f.endswith(".jpg")])
+                rel_base = os.path.relpath(fdir, BASE_DIR)
+                reid_files = sorted([os.path.join(rel_base, f) for f in os.listdir(fdir) if f.endswith(".jpg")])
 
             events = [
                 {
@@ -305,14 +325,15 @@ class TigerReIDRequestHandler(SimpleHTTPRequestHandler):
                 ("atrw_detection_train/trainval", "Detection Train"),
                 ("atrw_pose_train/train", "Pose Train")
             ]:
-                fdir = os.path.join(BASE_DIR, folder)
+                fdir = resolve_dataset_dir(*folder.split("/"))
                 if os.path.exists(fdir):
+                    rel_base = os.path.relpath(fdir, BASE_DIR)
                     fnames = sorted([f for f in os.listdir(fdir) if f.endswith(".jpg")])[:6]
                     for f in fnames:
                         samples.append({
                             "category": name,
                             "filename": f,
-                            "path": os.path.join(folder, f)
+                            "path": os.path.join(rel_base, f)
                         })
             self._send_json({"samples": samples})
 
@@ -358,6 +379,8 @@ class TigerReIDRequestHandler(SimpleHTTPRequestHandler):
             query_params = parse_qs(parsed.query)
             rel_path = query_params.get("path", [""])[0]
             full_path = os.path.join(BASE_DIR, rel_path)
+            if not os.path.exists(full_path):
+                full_path = os.path.join(BASE_DIR, "dataset", rel_path)
             if os.path.exists(full_path) and os.path.isfile(full_path):
                 self.send_response(200)
                 self.send_header("Content-Type", "image/jpeg")
@@ -457,7 +480,7 @@ class TigerReIDRequestHandler(SimpleHTTPRequestHandler):
             if not images:
                 if event_type == "multi_tiger":
                     # Load 2 or 3 distinct tiger frames to simulate multi-tiger crossing
-                    reid_dir = os.path.join(BASE_DIR, "atrw_reid_train", "train")
+                    reid_dir = resolve_dataset_dir("atrw_reid_train", "train")
                     if os.path.exists(reid_dir):
                         all_f = sorted([os.path.join(reid_dir, f) for f in os.listdir(reid_dir) if f.endswith(".jpg")])
                         for f in all_f[:4]:
@@ -478,7 +501,7 @@ class TigerReIDRequestHandler(SimpleHTTPRequestHandler):
                     images = [empty_img]
                 else:
                     # Default single tiger
-                    reid_dir = os.path.join(BASE_DIR, "atrw_reid_train", "train")
+                    reid_dir = resolve_dataset_dir("atrw_reid_train", "train")
                     if os.path.exists(reid_dir):
                         all_f = sorted([os.path.join(reid_dir, f) for f in os.listdir(reid_dir) if f.endswith(".jpg")])
                         for f in all_f[4:7]:
@@ -518,6 +541,8 @@ class TigerReIDRequestHandler(SimpleHTTPRequestHandler):
 
             if img_path:
                 full_path = os.path.join(BASE_DIR, img_path)
+                if not os.path.exists(full_path):
+                    full_path = os.path.join(BASE_DIR, "dataset", img_path)
                 if not os.path.exists(full_path):
                     self._send_json({"error": f"Image file not found: {img_path}"}, status_code=400)
                     return

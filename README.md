@@ -15,6 +15,7 @@ This system provides automated individual tiger identification, environmental ba
 ## 📑 Table of Contents
 
 - [Overview & Pipeline Architecture](#-overview--pipeline-architecture)
+- [Dataset & Provenance (ATRW)](#-dataset--provenance-atrw)
 - [5-Stage Visual Transformation](#-5-stage-visual-transformation)
 - [Mathematical Formulation](#-mathematical-formulation)
 - [Project Directory Structure](#-project-directory-structure)
@@ -43,6 +44,25 @@ flowchart LR
     F --> G["Known Tiger ID vs. Unknown Sighting (Enrollment Queue)"]
     G --> H["100% MCP Home Range & GIS Trajectory (Pench Reserve)"]
 ```
+
+---
+
+## 🐯 Dataset & Provenance (ATRW)
+
+This project is trained and evaluated using the **Amur Tiger Re-identification in the Wild (ATRW)** dataset hosted on [LILA BC (Labeled Information Library of Alexandria: Biology and Conservation)](https://lila.science/datasets/atrw):
+
+> **ATRW Dataset Portal**: [https://lila.science/datasets/atrw](https://lila.science/datasets/atrw)  
+> **Reference**: Li et al., *"Amur Tiger Re-identification in the Wild"*, arXiv:1906.05586 / ACM Multimedia 2020.
+
+### Dataset Structure & Split Modalities:
+1. **Tiger Re-Identification (`atrw_reid_train`, `atrw_reid_test`)**:
+   - Contains cropped bounding box tiger images across known individuals.
+   - Side-aware annotations (Left Flank, Right Flank) allowing precise viewpoint-specific metric matching.
+   - Used for training the **ConvNeXt-small Representation** and **64-D Metric Learning** networks, as well as constructing the reference gallery (`outputs/trained_gallery.json`).
+2. **Tiger Pose Estimation (`atrw_pose_train`, `atrw_pose_val`, `atrw_pose_test`)**:
+   - Contains 15-keypoint anatomical landmark annotations used for pose estimation, gait classification, and viewpoint alignment.
+3. **Tiger Detection (`atrw_detection_train`, `atrw_detection_test`)**:
+   - Full uncropped camera trap photographs with ground truth bounding boxes used for instance screening and detection calibration.
 
 ---
 
@@ -83,6 +103,14 @@ calculated over the convex hull of camera station coordinates $(x_i, y_i)$ where
 ## 📁 Project Directory Structure
 
 ```
+├── dataset/                       # ATRW wildlife dataset subdirectories
+│   ├── atrw_reid_train/           # Re-ID train image crops
+│   ├── atrw_reid_test/            # Re-ID test/query image crops
+│   ├── atrw_detection_train/      # Detection train annotations & frames
+│   ├── atrw_detection_test/       # Detection test frames
+│   ├── atrw_pose_train/           # 15-keypoint pose train split
+│   ├── atrw_pose_val/             # 15-keypoint pose validation split
+│   └── atrw_pose_test/            # 15-keypoint pose test split
 ├── config/
 │   ├── paper_config.yaml          # Hyperparameters from Ma et al. (2025)
 │   └── pench_deployment.yaml      # Pench Tiger Reserve camera network config
@@ -106,7 +134,7 @@ calculated over the convex hull of camera station coordinates $(x_i, y_i)$ where
 │   │   ├── ddrnet39_best.pth
 │   │   ├── convnext_representation_best.pth
 │   │   └── convnext_metric_best.pth
-│   ├── trained_gallery.json       # 200 enrolled 64-D reference embeddings (89 Tigers)
+│   ├── trained_gallery.json       # 2,373 enrolled 64-D reference embeddings
 │   ├── pench_sightings.db         # SQLite camera trap sightings database
 │   └── training_summary.json      # GPU training results & validation metrics
 ├── train_pipeline.py              # End-to-end GPU training pipeline script
@@ -125,7 +153,7 @@ calculated over the convex hull of camera station coordinates $(x_i, y_i)$ where
 | **`ddrnet39_best.pth`** | ~110 MB | Stage 2 DDRNet-39 binary segmentation model ($\text{MIoU} = 0.8300$). |
 | **`convnext_representation_best.pth`** | ~195 MB | Stage 4 ConvNeXt-small closed-set classifier across tiger identities. |
 | **`convnext_metric_best.pth`** | ~196 MB | Stage 4 ConvNeXt-small 64-D metric learning embedding head. |
-| **`trained_gallery.json`** | ~335 KB | 200 enrolled reference vectors across 89 tiger identities. |
+| **`trained_gallery.json`** | ~6.2 MB | 2,373 enrolled reference vectors across 107 tiger identities. |
 | **`pench_sightings.db`** | ~12 KB | SQLite database recording all verified camera-trap sightings. |
 
 ---
@@ -139,8 +167,8 @@ calculated over the convex hull of camera station coordinates $(x_i, y_i)$ where
 ### 2. Clone & Install Dependencies
 ```bash
 # Clone the repository
-git clone https://github.com/<your-username>/tiger-reid-pipeline.git
-cd tiger-reid-pipeline
+git clone https://github.com/piyush-141/tygris-research-model.git
+cd tygris-research-model
 
 # Install PyTorch with CUDA 12.1
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
@@ -169,7 +197,7 @@ To run single-image or video event inference via command line:
 
 ```bash
 # Run inference on a camera-trap photo
-python pipeline.py --demo-inference atrw_reid_train/train/000001.jpg
+python pipeline.py --demo-inference dataset/atrw_reid_train/train/000001.jpg
 ```
 
 **Output JSON**:
@@ -241,6 +269,15 @@ If you use this codebase or pipeline in your research, please cite:
   year={2025},
   publisher={Elsevier},
   doi={10.1016/j.ecolind.2025.113227}
+}
+
+@inproceedings{li2020atrw,
+  title={Amur Tiger Re-identification in the Wild},
+  author={Li, Shuyuan and Li, Jianguo and Tang, Hanlin and Qian, Rui and Lin, Weiyao},
+  booktitle={Proceedings of the 28th ACM International Conference on Multimedia (ACM MM)},
+  pages={4455--4463},
+  year={2020},
+  url={https://lila.science/datasets/atrw}
 }
 ```
 

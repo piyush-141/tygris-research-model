@@ -27,6 +27,14 @@ env/
 ENV/
 
 # Large Datasets (Images should not be committed to GitHub)
+dataset/
+dataset/atrw_reid_train/
+dataset/atrw_reid_test/
+dataset/atrw_detection_train/
+dataset/atrw_detection_test/
+dataset/atrw_pose_train/
+dataset/atrw_pose_test/
+dataset/atrw_pose_val/
 atrw_reid_train/
 atrw_reid_test/
 atrw_detection_train/

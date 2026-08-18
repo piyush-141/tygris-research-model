@@ -110,7 +110,9 @@ class TigerReIDSystem:
 
     def initialize_mock_gallery(self, dataset_builder: TigerDatasetBuilder):
         """Initializes gallery from local training images."""
-        reid_path = "atrw_reid_train/train"
+        reid_path = os.path.join("dataset", "atrw_reid_train", "train")
+        if not os.path.exists(reid_path):
+            reid_path = os.path.join("atrw_reid_train", "train")
         if not os.path.exists(reid_path):
             return
 

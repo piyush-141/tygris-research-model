@@ -109,7 +109,9 @@ class TestTwoPassEventPipeline(unittest.TestCase):
 
     def test_full_event_processing(self):
         # Use real image from dataset if available
-        sample_path = "atrw_reid_train/train/000001.jpg"
+        sample_path = os.path.join("dataset", "atrw_reid_train", "train", "000001.jpg")
+        if not os.path.exists(sample_path):
+            sample_path = os.path.join("atrw_reid_train", "train", "000001.jpg")
         if os.path.exists(sample_path):
             img = Image.open(sample_path).convert("RGB")
             frames = [img, img, img]

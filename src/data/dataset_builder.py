@@ -62,14 +62,20 @@ class TigerDatasetBuilder:
             except Exception as e:
                 print(f"[Warning] Could not load Keypoints: {e}")
 
-        # Scan images across local folders
+        # Scan images across local folders (supporting dataset/ subfolder or root)
+        def _resolve_dir(*subpaths):
+            p1 = os.path.join(base_dir, "dataset", *subpaths)
+            if os.path.exists(p1):
+                return p1
+            return os.path.join(base_dir, *subpaths)
+
         directories = {
-            "reid_train": os.path.join(base_dir, "atrw_reid_train", "train"),
-            "reid_test": os.path.join(base_dir, "atrw_reid_test", "test"),
-            "detection_train": os.path.join(base_dir, "atrw_detection_train", "trainval"),
-            "detection_test": os.path.join(base_dir, "atrw_detection_test", "test"),
-            "pose_train": os.path.join(base_dir, "atrw_pose_train", "train"),
-            "pose_val": os.path.join(base_dir, "atrw_pose_val", "val"),
+            "reid_train": _resolve_dir("atrw_reid_train", "train"),
+            "reid_test": _resolve_dir("atrw_reid_test", "test"),
+            "detection_train": _resolve_dir("atrw_detection_train", "trainval"),
+            "detection_test": _resolve_dir("atrw_detection_test", "test"),
+            "pose_train": _resolve_dir("atrw_pose_train", "train"),
+            "pose_val": _resolve_dir("atrw_pose_val", "val"),
         }
 
         # Run QC Audit on raw image files
